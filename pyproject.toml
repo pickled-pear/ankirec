@@ -1,0 +1,16 @@
+[project]
+name = "ankirec"
+version = "1.0.0"
+readme = "README.md"
+description = "foo bar"
+dependencies = ["click", "pynput", "rich"]
+
+[project.scripts]
+ankirec = "ankirec.__main__:cli"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}

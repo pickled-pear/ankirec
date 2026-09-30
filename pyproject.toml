@@ -1,9 +1,13 @@
 [project]
 name = "ankirec"
-version = "1.0.0"
+version = "1.0.1"
 readme = "README.md"
 description = "foo bar"
-dependencies = ["click", "pynput", "rich"]
+dependencies = ["click", "pynput", "rich", "requests"]
+
+[project.optional-dependencies]
+windows = []
+linux = []
 
 [project.scripts]
 ankirec = "ankirec.__main__:cli"

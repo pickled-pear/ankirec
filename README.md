@@ -1,6 +1,6 @@
-# Project Name
+# Ankirec
 
-Brief one-line description of what your project does.
+A tool for helping create your own anki flashcards, with screen and sound recording.
 
 ## Overview
 
@@ -13,35 +13,34 @@ A more detailed description of your project. Explain:
 
 ### Prerequisites
 
-List what's needed before installation:
 - Python 3.10+
-- Node.js 18+
-- PostgreSQL 14+
-- etc.
+- ffmpeg MUST be on path
+    - run ffmpeg --version anywhere to check
+
+If you are on linux:
+- pulseaudio-utils 
+
+```bash
+sudo apt install pulseaudio-utils
+```
 
 ### Installation
 
-Step-by-step instructions to get the project running locally:
-
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/project-name.git
-cd project-name
+git clone https://github.com/pickled-pear/ankirec.git
+cd ankirec
 
-# Install dependencies
-npm install
-# or
-pip install -r requirements.txt
+# Install project (choose your platform)
+pip install -e .[linux]
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
+pip install -e .[windows]
 
-# Run the project
-npm start
-# or
-python main.py
+# run
+ankirec --help
 ```
+
+Make sure you choose the correct platform. Linux is supported on debian systems.
 
 ## Usage
 

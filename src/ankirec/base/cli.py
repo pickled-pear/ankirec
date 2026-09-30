@@ -4,57 +4,11 @@ import sys
 import os
 import json
 
+
 from .listeners import ListenerManager, RecordListener, AbortRecordListener
-
-APP_NAME = "ankirec"
-SCRIPT_DIR = Path(__file__).parent
-DEFAULT_SETTINGS = {
-
-}
-
-_config_cache: dict | None = None
-def get_config() -> dict:
-    """Get config with caching."""
-    global _config_cache
-    if _config_cache is None:           # First call: cache is empty
-        _config_cache = load_config()   # Load from disk
-    return _config_cache                # Return cached version
-
-def invalidate_cache() -> None:
-    """Clear cache after saving."""
-    global _config_cache
-    _config_cache = None                # Reset to None
-
-def get_config_path() -> Path:
-    """Get the config file path, creating directory if needed."""
-    config_dir = Path(click.get_app_dir(APP_NAME))
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir / "config.json"
-
-def load_config() -> dict:
-    """Load config, merging with defaults."""
-    path = get_config_path()
-    config = DEFAULT_SETTINGS.copy()
-    
-    if path.exists():
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                config.update(json.load(f))
-        except json.JSONDecodeError as e:
-            click.echo(f"Warning: Config file corrupted, using defaults: {e}", err=True)
-    
-    return config
-
-def save_config(config: dict) -> None:
-    """Save config to file."""
-    path = get_config_path()
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
-
-def update_config(config: dict):
-    """Saves the config and clears the cache"""
-    save_config(config=config)
-    invalidate_cache()
+from .constants import APP_NAME
+from .config import DEFAULT_SETTINGS
+from .context import verbose_mode
 
 
 def verify_location_safety():
@@ -89,10 +43,11 @@ def cli():
 
 
 @cli.command(name="record")
-def record():
+@click.option("--verbose", is_flag=True, default=False, help="Verbose flag")
+def record(verbose):
     """Starts listening to record screen"""
     listener_manager = ListenerManager()
-
+    verbose_mode.set(verbose)
 
     listener_manager.add_listener(RecordListener())
     listener_manager.add_listener(AbortRecordListener())

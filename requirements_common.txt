@@ -1,0 +1,9 @@
+click
+pynput
+rich
+requests
+
+# pygame  # investigate smaller packages that can play audio
+
+mss
+pillow

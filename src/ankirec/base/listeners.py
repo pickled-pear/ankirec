@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from pynput import keyboard
 import threading
 
+from ..anki.flashcard import FlashcardManager
+from ..recording.full_recorder import FullRecorder
 
 class KeyListener(ABC):
     """Base class for restartable keyboard listeners."""
@@ -79,9 +81,16 @@ class ListenerManager:
             self.stop_all()
 
 
+
 class RecordListener(KeyListener):
     """Class that listens to trigger recording"""
     target_keys = set([keyboard.Key.alt_r, keyboard.Key.alt_gr])
+    flashcard: FlashcardManager
+
+    def __init__(self,):
+        # super().__init__(verbose=verbose, on=True)
+        super().__init__()
+        self.flashcard = FlashcardManager()
 
     def map_to_key(self, keyvk: int) -> keyboard.Key | None:
         """right alt is non-consistent across platforms so map it if does not work"""
@@ -101,15 +110,21 @@ class RecordListener(KeyListener):
             key = self.map_to_key(key.vk)
 
         if key in self.target_keys:
-            print("Wow! Alt was pressed!")
+            self.flashcard.on_press()
 
 class AbortRecordListener(KeyListener):
     """Class that listens to abort recording"""
     target_keys = set([keyboard.KeyCode.from_char("q")])
+    recorder: FullRecorder
+
+    def __init__(self):
+        super().__init__()
+        self.recorder = FullRecorder()
 
     def on_press(self, key):
         if key in self.target_keys:
-            print("ABORT")
+            self.recorder.abort()
+            print(self.recorder.recording_cycle)
 
 
 class Parrot(KeyListener):

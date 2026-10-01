@@ -7,7 +7,7 @@ import json
 
 from .listeners import ListenerManager, RecordListener, AbortRecordListener
 from .constants import APP_NAME
-from .config import DEFAULT_SETTINGS
+from .config import Config
 from .context import verbose_mode
 
 
@@ -119,4 +119,5 @@ def set_value(setting, value):
 def reset_to_default():
     """Reset all settings to default values"""
     # note to self: make the user confirm somehow
-    raise NotImplementedError
+    Config().reset_to_defaults()
+    print("Reset")

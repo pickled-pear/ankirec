@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from base64 import b64encode
 
 from ..base.exceptions import AnkiConnectError
-from ..base.universal import warn, success_message
 from ..base.config import Config
 from ..base.mixin import VerboseMixin
 
@@ -83,7 +82,7 @@ class AnkiconnectActions(SharedValues):
                 notes_json = json.load(f)
 
             if not notes_json:
-                self.echo("[yellow]No notes found")
+                self.warning("No notes found")
                 return
 
             for note in notes_json:
@@ -99,7 +98,7 @@ class AnkiconnectActions(SharedValues):
             return result
 
         else:
-            warn("Anki is not running!")
+            self.warning("Anki is not running!")
 
     def set_port(self, port: int):
         self.port = port
@@ -108,6 +107,8 @@ class AnkiconnectActions(SharedValues):
     def wipe_json(self):
         with open(self.notes_json_file, "w") as file:
             json.dump([], file)
+
+        self.info("Note json cleared")
 
 
     def move_file_to_ank_media(self, filename: str, filepath: Path):
@@ -120,7 +121,7 @@ class AnkiconnectActions(SharedValues):
             raise AnkiConnectError(f"Failed to read file {filepath}: {e}")
         
         result = self._invoke("storeMediaFile", filename=filename, data=media_data)
-        self.echo(f"Stored media file: {filename}")
+        self.debug(f"Stored media file: {filename}")
         return result
         
 
@@ -208,12 +209,12 @@ class AnkiManager(SharedValues):
         if self.screenshot:
             result = self.actions.move_file_to_ank_media(self.screenshot.name, self.screenshot)
             if not result.get("error"):
-                self.echo("Screenshot moved")
+                self.debug("Screenshot moved")
 
         if self.audio:
             result = self.actions.move_file_to_ank_media(self.audio.name, self.audio)
             if not result.get("error"):
-                self.echo("Audio moved")
+                self.debug("Audio moved")
 
     
 
@@ -238,19 +239,22 @@ class AnkiManager(SharedValues):
             existing_notes = json.load(file)
 
         existing_notes.append(note_json)
+        self.debug(f"{len(existing_notes)} notes")
 
         # adds to the json
         with open(self.notes_json_file, "w") as file:
             json.dump(existing_notes, file, indent=4, ensure_ascii=False)
 
+        self.debug(f"instant_send: {True}")
         if self.config.instant_send:
-            self.echo("Sending notes...")
+            self.info("Sending notes...")
             result = self.actions.send_notes_to_anki()
             if not result.get("error"):
-                success_message("Sent notes!")
+                self.info("Sent notes!")
+            else:
+                self.error(f"Error: {result.get("error")}")
                 
 
 
 if __name__ == "__main__":
     print(is_port_open(8765))
-

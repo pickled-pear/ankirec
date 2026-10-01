@@ -1,15 +1,13 @@
 import json
 from pathlib import Path
 from typing import Optional
-from .mixin import VerboseMixin
 from .constants import APP_NAME, DEFAULT_SETTINGS
-from .universal import warn, singleton
+from .universal import singleton
 import click # used to get the app dir
 from dataclasses import dataclass
 
-
 @singleton
-class Config(VerboseMixin):
+class Config:
     config_path: Path
     DEFAULT_CONFIG: dict | None = None
     _config_cache: Optional[dict] = None
@@ -34,7 +32,7 @@ class Config(VerboseMixin):
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     config.update(json.load(f))
             except json.JSONDecodeError as e:
-                warn(f"Warning: Config file corrupted, using defaults: {e}", err=True)
+                print(f"Warning: Config file corrupted, using defaults: {e}", err=True)
         return config
 
     def load_specific_config(self, config_section: str) -> dict:
@@ -68,10 +66,72 @@ class Config(VerboseMixin):
     def reset_to_defaults(self) -> None:
         """Resets every setting to its default value"""
         self.save_config(self.DEFAULT_CONFIG)
+        self.invalidate_cache()
 
     def get_single_config(self, key: str):
-        """Gets a single setting"""
-        raise NotImplementedError
+        """Gets a single setting by key.
+        
+        Args:
+            key: The configuration key to retrieve (supports nested keys with dot notation)
+            
+        Returns:
+            The configuration value
+            
+        Raises:
+            KeyError: If the key is not found in configuration
+        """
+        config = self.get_config()
+        
+        # Support nested keys with dot notation (e.g., "anki.deckname")
+        if "." in key:
+            keys = key.split(".")
+            value = config
+            for k in keys:
+                if isinstance(value, dict):
+                    value = value.get(k)
+                    if value is None:
+                        raise KeyError(f"Configuration key not found: {key}")
+                else:
+                    raise KeyError(f"Cannot access '{k}' in non-dict value for key '{key}'")
+            return value
+        
+        if key not in config:
+            raise KeyError(f"Configuration key not found: {key}")
+        return config[key]
+
+    def set_single_config(self, key: str, value: any) -> None:
+        """Sets a single configuration value.
+        
+        Args:
+            key: The configuration key to set (supports nested keys with dot notation)
+            value: The value to set
+        """
+        config = self.get_config().copy()
+        
+        # Support nested keys with dot notation (e.g., "general.theme")
+        if "." in key:
+            keys = key.split(".")
+            target = config
+            for k in keys[:-1]:
+                if k not in target:
+                    target[k] = {}
+                target = target[k]
+            target[keys[-1]] = value
+        else:
+            config[key] = value
+        
+        self.update_config(config)
+
+    def config_exists(self) -> bool:
+        """Check if configuration file exists."""
+        return self.config_path.exists()
+
+    def delete_config_file(self) -> None:
+        """Delete the configuration file and clear cache."""
+        if self.config_exists():
+            self.config_path.unlink()
+        self.invalidate_cache()
+        
 
 @dataclass
 class RecordingConfig:

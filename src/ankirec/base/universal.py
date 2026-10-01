@@ -13,13 +13,13 @@ elif PLATFORM == "linux":
     import termios
 
 
-def warn(*args):
-    """Prints the arguments with formatting. Not surpressed by verbose"""
-    print(f"[yellow]{' '.join(str(arg) for arg in args)}")
+# def warn(*args):
+#     """Prints the arguments with formatting. Not surpressed by verbose"""
+#     print(f"[yellow]{' '.join(str(arg) for arg in args)}")
 
-def success_message(*args):
-    """Prints the arguments with formatting. Not surpressed by verbose"""
-    print(f"[green]{' '.join(str(arg) for arg in args)}")
+# def success_message(*args):
+#     """Prints the arguments with formatting. Not surpressed by verbose"""
+#     print(f"[green]{' '.join(str(arg) for arg in args)}")
 
 
 

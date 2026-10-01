@@ -27,6 +27,7 @@ DEFAULT_SETTINGS = {
     # CHECK FOR UNUSED SETTINGS ME
     "general": {
         "developer": False,
+        "logging_level": 1  # 1 - 5
         # blah blah blah git jists
     },
     "anki": {

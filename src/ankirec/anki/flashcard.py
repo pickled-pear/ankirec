@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from ..base.mixin import VerboseMixin
 from ..recording.full_recorder import FullRecorder
 from ..anki.anki import AnkiManager
+from ..base.context import verbose_mode
 
 import time
 import threading
@@ -18,7 +19,7 @@ class FlashcardManager(VerboseMixin):
     def __init__(self):
         super().__init__()
         self.combined_recorder = FullRecorder()
-
+        self.persistent_verbose = self.verbose
 
     def _start_abort_timer(self, recording_cycle: int, timeout_seconds: int) -> None:
         """
@@ -42,13 +43,17 @@ class FlashcardManager(VerboseMixin):
 
         else:
             screenshot, audio = self.combined_recorder.stop_recording()
+            verbose_mode.set(self.persistent_verbose)
+
             ankimanager = AnkiManager(screenshot=screenshot, audio=audio)
 
-            self.echo("Moving media...")
+            self.info("Moving media...")
             ankimanager.move_media_to_anki()
 
-            self.echo("Adding note...")
+            self.info("Adding note...")
             ankimanager.add_notes_to_json()
+
+            self.info("Done! Ready to add next note.")
 
             
 

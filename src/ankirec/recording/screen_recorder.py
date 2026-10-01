@@ -53,7 +53,7 @@ class ScreenshotTaker(VerboseMixin):
 
     def start(self, stop_event: threading.Event = None):
         """Start capturing screenshots at configured FPS"""
-        self.echo("Screenshot Taker: Starting")
+        self.debug("Screenshot Taker: Starting")
         
         # Use provided stop_event or internal one
         event = stop_event or self.stop_event
@@ -63,11 +63,11 @@ class ScreenshotTaker(VerboseMixin):
             self.take_screenshot()
             time.sleep(interval)
 
-        self.echo("Screenshot Taker: Stopped")
+        self.debug("Screenshot Taker: Stopped")
 
     def stop(self):
         """Stop taking screenshots"""
-        self.echo("Screenshot Taker: Stop signal received")
+        self.debug("Screenshot Taker: Stop signal received")
         self.stop_event.set()
 
     def take_screenshot(self) -> Optional[Screenshot]:
@@ -92,12 +92,12 @@ class ScreenshotTaker(VerboseMixin):
 
             screenshot = Screenshot(filepath=filepath, timestamp=timestamp)
             self.screenshots.append(screenshot)
-            # self.echo(f"Screenshot saved: {filepath}")
+            self.debug(f"Screenshot saved: {filepath}")
 
             return screenshot
 
         except Exception as e:
-            self.echo(f"Error taking screenshot: {e}")
+            self.debug(f"Error taking screenshot: {e}")
             return None
 
     def _capture_mss(self):
@@ -113,7 +113,7 @@ class ScreenshotTaker(VerboseMixin):
                     screenshot.rgb
                 )
         except Exception as e:
-            self.echo(f"mss capture failed: {e}")
+            self.error(f"mss capture failed: {e}")
             return None
 
     def _capture_pil(self):
@@ -121,7 +121,7 @@ class ScreenshotTaker(VerboseMixin):
         try:
             return self.pil_grab.grab()
         except Exception as e:
-            self.echo(f"PIL capture failed: {e}")
+            self.error(f"PIL capture failed: {e}")
             return None
 
     def _save_raw_image(self, img, counter: int) -> Optional[Path]:
@@ -135,7 +135,7 @@ class ScreenshotTaker(VerboseMixin):
             return filepath
 
         except Exception as e:
-            self.echo(f"Error saving screenshot: {e}")
+            self.error(f"Error saving screenshot: {e}")
             return None
 
 
@@ -182,24 +182,24 @@ class ScreenshotTaker(VerboseMixin):
             # Step 4: Save with compression, overwriting original
             img.save(filepath, 'JPEG', quality=75, optimize=True)
 
-            self.echo(f"Processed: {filepath} ({img.width}×{img.height}px)")
+            self.debug(f"Processed: {filepath} ({img.width}×{img.height}px)")
             return filepath
 
         except Exception as e:
-            self.echo(f"Error processing screenshot: {e}")
+            self.error(f"Error processing screenshot: {e}")
             return filepath
         
 
     def get_output_screenshot(self) -> Optional[Path]:
         """Select and process screenshot for output"""
         if not self.screenshots:
-            self.echo("No screenshots available")
+            self.warning("No screenshots available")
             return None
 
         target_index = floor(len(self.screenshots) * self.config.screenshot_time)
         target_index = min(target_index, len(self.screenshots) - 1)
 
-        self.echo(f"\nChose screenshot {target_index} out of {len(self.screenshots)}")
+        self.debug(f"\nChose screenshot {target_index} out of {len(self.screenshots)}")
 
         filepath = self.screenshots[target_index].filepath
         

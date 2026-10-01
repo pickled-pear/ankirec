@@ -1,7 +1,6 @@
 from ..base.mixin import *
 from ..base.constants import PLATFORM, SCRIPT_DIR
 # from ..base.universal import timeout_wrapper
-from ..base.universal import warn
 from ..base.config import Config, RecordingConfig
 from .audio_recorder import AudioRecorderFactory
 from .screen_recorder import ScreenshotTaker
@@ -85,7 +84,7 @@ class FullRecorder(VerboseMixin):
         )
 
     def start_recording(self) -> None:
-        self.echo("Beginning recording...")
+        self.info("Beginning recording...")
         self.recording_cycle += 1
         self.recording = True
         self.stop_event.clear()
@@ -116,7 +115,7 @@ class FullRecorder(VerboseMixin):
 
     def stop_recording(self) -> tuple[Path, Path]:
         """Stop recording and clean up threads"""
-        self.echo("Stopped!")
+        self.info("Stopped!")
         end_time = time.time()
         self.stop_event.set()
         
@@ -132,21 +131,21 @@ class FullRecorder(VerboseMixin):
             self.audio_recorder.stop()
             audio_file = self.audio_recorder.get_output_audio()
         except Exception as e:
-            self.echo(f"Error stopping audio recorder: {e}")
+            self.error(f"Error stopping audio recorder: {e}")
 
         screenshot = None
         try:
             self.screen_recorder.stop()
             screenshot = self.screen_recorder.get_output_screenshot()
         except Exception as e:
-            self.echo(f"Error stopping screen recorder: {e}")
+            self.error(f"Error stopping screen recorder: {e}")
 
 
         self.wipe_media_folder(audio_file, screenshot)
 
 
         self.recording = False
-        self.echo("### Recording Done ###\n")
+        self.info("### Recording Done ###\n")
         return screenshot, audio_file
 
 
@@ -168,7 +167,7 @@ class FullRecorder(VerboseMixin):
     def wipe_media_folder(self, *exclude: Path):
         """Wipes the media folder of all files, excluding given files. But only if set."""
         if self.config.wipe_media_folder:
-            self.echo("Deleting media...")
+            self.info("Deleting media...")
             
             media_path = Path(self.config.output_dir)
             
@@ -187,4 +186,4 @@ class FullRecorder(VerboseMixin):
                         try:
                             file_path.unlink()
                         except Exception as e:
-                            self.echo(f"Error deleting {file_path}: {e}")
+                            self.error(f"Error deleting {file_path}: {e}")

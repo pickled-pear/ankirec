@@ -4,14 +4,16 @@ import threading
 
 from ..anki.flashcard import FlashcardManager
 from ..recording.full_recorder import FullRecorder
+from ..base.mixin import VerboseMixin
 
-class KeyListener(ABC):
+class KeyListener(ABC, VerboseMixin):
     """Base class for restartable keyboard listeners."""
     target_keys: set[keyboard.Key, keyboard.KeyCode]
 
     def __init__(self) -> None:
+        super().__init__()
         self._listener: keyboard.Listener | None = None
-
+        
     @abstractmethod
     def on_press(self, key: keyboard.Key | keyboard.KeyCode | None) -> bool | None:
         """Called on key press. Return False to stop listening."""
@@ -45,10 +47,11 @@ class KeyListener(ABC):
             self._listener.join()
 
 
-class ListenerManager:
+class ListenerManager(VerboseMixin):
     """Manages multiple keyboard listeners running concurrently."""
     
     def __init__(self) -> None:
+        super().__init__()
         self.listeners: list[KeyListener] = []
         self._stop_event = threading.Event()
     
@@ -77,7 +80,7 @@ class ListenerManager:
             # Returns immediately when set, no polling
             self._stop_event.wait()
         except KeyboardInterrupt:
-            print("\nShutting down...")
+            self.info("\nShutting down...")
             self.stop_all()
 
 
@@ -91,6 +94,7 @@ class RecordListener(KeyListener):
         # super().__init__(verbose=verbose, on=True)
         super().__init__()
         self.flashcard = FlashcardManager()
+        self.info("Listening! Press altgr to start")
 
     def map_to_key(self, keyvk: int) -> keyboard.Key | None:
         """right alt is non-consistent across platforms so map it if does not work"""
@@ -124,7 +128,7 @@ class AbortRecordListener(KeyListener):
     def on_press(self, key):
         if key in self.target_keys:
             self.recorder.abort()
-            print(self.recorder.recording_cycle)
+            self.debug(self.recorder.recording_cycle)
 
 
 class Parrot(KeyListener):

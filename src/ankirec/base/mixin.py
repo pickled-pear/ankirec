@@ -24,10 +24,10 @@ class VerboseMixin:
             self.logger.setLevel(logging.DEBUG)
 
     def echo(self, *args):
-        """Default echo — logs at info level"""
+        """Default echo"""
         if self.verbose:
             message = ' '.join(str(arg) for arg in args)
-            self.logger.info(message)
+            print(message)
 
     def debug(self, *args):
         """Log at debug level"""

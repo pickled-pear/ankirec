@@ -199,7 +199,7 @@ class ScreenshotTaker(VerboseMixin):
         target_index = floor(len(self.screenshots) * self.config.screenshot_time)
         target_index = min(target_index, len(self.screenshots) - 1)
 
-        self.debug(f"\nChose screenshot {target_index} out of {len(self.screenshots)}")
+        self.debug(f"Chose screenshot {target_index} out of {len(self.screenshots)}")
 
         filepath = self.screenshots[target_index].filepath
         

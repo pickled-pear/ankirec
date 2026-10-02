@@ -146,6 +146,7 @@ class FullRecorder(VerboseMixin):
 
         self.recording = False
         self.info("### Recording Done ###\n")
+        self.recording_cycle+=1
         return screenshot, audio_file
 
 

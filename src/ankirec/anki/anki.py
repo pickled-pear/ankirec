@@ -37,6 +37,7 @@ class AnkiconnectActions(SharedValues):
         self.set_port(port=port)
         self.API_VERSION = api_ver
         # self.notes_json_file = Path("notes.json")
+        # self._moved_media_filename = None
 
     def _invoke(self, action, **params):
         """Sends an action request to AnkiConnect and returns the result.
@@ -112,6 +113,7 @@ class AnkiconnectActions(SharedValues):
 
 
     def move_file_to_ank_media(self, filename: str, filepath: Path):
+        """Moves the given file to anki"""
         try:
             with open(filepath, 'rb') as f:
                 media_data = b64encode(f.read()).decode('utf-8')
@@ -122,6 +124,7 @@ class AnkiconnectActions(SharedValues):
         
         result = self._invoke("storeMediaFile", filename=filename, data=media_data)
         self.debug(f"Stored media file: {filename}")
+        # self._moved_media_filename = str(filepath)
         return result
         
 
@@ -208,6 +211,7 @@ class AnkiManager(SharedValues):
         """Moves both the screenshot and audio file to anki (if they exist)"""
         if self.screenshot:
             result = self.actions.move_file_to_ank_media(self.screenshot.name, self.screenshot)
+
             if not result.get("error"):
                 self.debug("Screenshot moved")
 
@@ -218,8 +222,11 @@ class AnkiManager(SharedValues):
 
     
 
-    def add_notes_to_json(self):
+    def add_notes_to_json(self, fields: dict = {}):
         """Adds the given data as a note to notes.json. Sends them to anki if setting enabled"""
+
+        screenshot_str = f"""<img src="{self.screenshot.name}">""" if self.screenshot.name else ""
+        audio = self.audio.name if self.audio.name else ""
 
         # TEMP
         tagarr = []
@@ -228,8 +235,8 @@ class AnkiManager(SharedValues):
                 "modelName":"MiningCard",
                 "fields":{
                     "Word":"tempword",
-                    "Image":f"""<img src="{self.screenshot.name}">""",
-                    "SentenceAudio":f"[sound:{self.audio.name}]",
+                    "Image":screenshot_str,
+                    "SentenceAudio":f"[sound:{audio}]",
                 },
                 "tags":tagarr
         }

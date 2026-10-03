@@ -1,6 +1,6 @@
 [project]
 name = "ankirec"
-version = "1.0.2"
+version = "1.0.3"
 readme = "README.md"
 description = "foo bar"
 dependencies = ["click", "pynput", "rich", "requests", "mss", "pillow"]

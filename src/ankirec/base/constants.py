@@ -21,7 +21,8 @@ def _get_platform() -> UserPlatform:
 
 PLATFORM = _get_platform()
 APP_NAME = "ankirec"
-SCRIPT_DIR = Path(__file__).parent
+SCRIPT_DIR = Path(__file__).parent.parent
+print(SCRIPT_DIR)
 
 DEFAULT_SETTINGS = {
     # CHECK FOR UNUSED SETTINGS ME

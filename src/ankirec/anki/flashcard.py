@@ -2,7 +2,11 @@ from ..base.mixin import VerboseMixin
 from ..recording.full_recorder import FullRecorder
 from ..anki.anki import AnkiManager
 from ..base.context import verbose_mode
-from .fields_input_api.input_api import Field, DialogCancelled, InputDialog
+# from .fields_input_api.input_api import Field, DialogCancelled, InputDialog
+# from .fields_input_api.input_pysimplegui import InputDialog, Field, DialogCancelled
+
+# from .fields_input_api.input_server import DialogCancelled, Field, InputDialog
+from .fields_input_api.input_api import InputDialog, DialogCancelled, Field
 
 import time
 import threading
@@ -33,7 +37,7 @@ class FlashcardManager(VerboseMixin):
 
     def retake_image(self) -> Path:
         """Retakes the image and returns the new one"""
-        print("Retaking in 1s")
+        self.info("Retaking in 1s")
         time.sleep(1)
         new_screenshot = self.combined_recorder.screen_recorder.take_screenshot()
         self.retaken_screenshot = new_screenshot
@@ -55,19 +59,19 @@ class FlashcardManager(VerboseMixin):
             time.sleep(0.2)
             
             # On Windows, pump the message queue to ensure COM cleanup is complete
-            try:
-                import sys
-                if sys.platform == "win32":
-                    import ctypes
-                    MSG = ctypes.c_char * 28
-                    msg = MSG()
-                    # Pump pending messages briefly
-                    for _ in range(5):
-                        ctypes.windll.user32.PeekMessageA(ctypes.byref(msg), 0, 0, 0, 1)
-                        ctypes.windll.kernel32.Sleep(10)
-            except Exception:
-                # Not critical if this fails
-                pass
+            # try:
+            #     import sys
+            #     if sys.platform == "win32":
+            #         import ctypes
+            #         MSG = ctypes.c_char * 28
+            #         msg = MSG()
+            #         # Pump pending messages briefly
+            #         for _ in range(5):
+            #             ctypes.windll.user32.PeekMessageA(ctypes.byref(msg), 0, 0, 0, 1)
+            #             ctypes.windll.kernel32.Sleep(10)
+            # except Exception:
+            #     # Not critical if this fails
+            #     pass
             
             verbose_mode.set(self.persistent_verbose)
 
@@ -83,9 +87,9 @@ class FlashcardManager(VerboseMixin):
                         Field("Notes", optional=True)
                     ],
                     title="Add Note",
-                    # image_path=screenshot,
-                    # audio_path=audio,
-                    # retake_callback=self.retake_image
+                    image_path=screenshot,
+                    audio_path=audio,
+                    retake_callback=self.retake_image
                     
                 )
                 if not fields:

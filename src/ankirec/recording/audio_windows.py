@@ -1,10 +1,12 @@
 """
 Windows audio recorder using WASAPI loopback via soundcard.
+Merges the working recordingClasses.py pattern into the modular structure.
 
 Dependencies: soundcard, soundfile, pywin32
 """
 
 import threading
+import gc
 from pathlib import Path
 from typing import Optional
 
@@ -22,214 +24,157 @@ class WindowsAudioRecorder(AbstractAudioRecorder):
     def __init__(self, config: AudioConfigProtocol):
         super().__init__(config)
         self.audio_file: Optional[Path] = None
-        self._lock = threading.Lock()
-        self._ready_event = threading.Event()  # Signals when recorder is ready
         self._output_dir = Path(config.output_dir)
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        
-        self.audio_data = []  # List of chunks
-        self.is_recording = False
-        self._recording_started = False  # Track if recording thread has actually started
-        self.record_thread: Optional[threading.Thread] = None
-        self.mic = None
-        self._stop_event = None
 
-    def start(self, stop_event: threading.Event = None):
-        """Start recording system audio using WASAPI loopback."""
+        self.audio_data = []
+        self.is_recording = False
+        self.mic = None
+
+    def start(self) -> None:
+        """Start recording system audio using WASAPI loopback in background thread."""
         self.debug("Audio Recorder: Start (Windows)")
 
         with self._lock:
-            if self.is_recording:
-                raise RuntimeError("Recording already in progress")
+            if self._thread is not None and self._thread.is_alive():
+                raise RuntimeError("Recording thread already running")
 
-            self.audio_file = self._output_dir / f"{self.config.timestamp}.wav"
-            self.audio_data = []
-            self._recording_started = False  # Reset flag for new recording
-            self._stop_event = stop_event
-            self._ready_event.clear()
-            self.record_thread = None
-
-        # Do COM initialization on this thread BEFORE starting recording thread
-        # This avoids race conditions and is much faster on first run
+        # CRITICAL: Device selection ONLY — COM init/uninit scoped here
         try:
             pythoncom.CoInitialize()
-        except:
-            # Already initialized, that's fine
-            pass
+            try:
+                self.mic = self._select_loopback_device()
+                self.debug(f"Using device: {self.mic.name}")
+            finally:
+                pythoncom.CoUninitialize()
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialise audio device: {e}")
 
-        try:
-            self.mic = self._select_loopback_device()
-            self.debug(f"Using device: {self.mic.name}")
-
-            # Start recording thread (NOT daemon, so we can join cleanly)
-            self.record_thread = threading.Thread(
+        # Now start recording thread with its own COM context
+        with self._lock:
+            self.audio_file = self._output_dir / f"{self.config.timestamp}.wav"
+            self.audio_data = []
+            self.is_recording = True
+            self._thread = threading.Thread(
                 target=self._record_loop,
                 daemon=False,
             )
-            self.record_thread.start()
+            self._thread.start()
 
-            # Wait for recording thread to signal it's ready
-            # Timeout after 5 seconds as a safety net
-            if not self._ready_event.wait(timeout=5.0):
-                self.warning("Recording thread took >5s to initialize")
-            
-            with self._lock:
-                self.is_recording = True
-            
-            self.debug("Recording thread ready")
+        self.debug("Recording thread started")
 
-        except Exception as e:
-            with self._lock:
-                self.is_recording = False
-                self.audio_data = []
-            try:
-                pythoncom.CoUninitialize()
-            except:
-                pass
-            raise RuntimeError(f"Failed to start recording: {e}")
-
-    def _record_loop(self):
-        """Recording thread loop."""
+    def _record_loop(self) -> None:
+        """Recording thread loop with its own COM context."""
         recorder = None
+        com_initialised = False
+
         try:
-            # Initialize COM on this thread with apartment mode for better interop
+            # Initialise COM on this thread only
             pythoncom.CoInitialize()
-            
-            # Create recorder in a scoped context to ensure cleanup
+            com_initialised = True
+            self.debug("COM initialised on recording thread")
+
+            # Create recorder
             recorder = self.mic.recorder(
                 samplerate=self.config.sample_rate,
                 blocksize=4096,
             )
             recorder.__enter__()
-            
-            # Signal that recorder is ready and first block is about to be read
-            with self._lock:
-                self._recording_started = True
-            self._ready_event.set()
-            self.debug("Recorder initialized and ready")
-            
-            while self.is_recording:
-                # Check stop event
-                if self._stop_event and self._stop_event.is_set():
-                    self.debug("Stop event received in record loop")
-                    break
+            self.debug("Recorder ready")
 
-                # Read audio block
+            # Main recording loop
+            while self.is_recording:
                 try:
                     data = recorder.record(numframes=4096)
                 except Exception as e:
                     self.error(f"Error recording block: {e}")
                     break
-                    
+
                 if data is None or len(data) == 0:
                     self.debug("No data from recorder, stopping")
                     break
 
-                # Store chunk
+                # Store chunk safely
                 with self._lock:
                     if self.is_recording:
-                        self.audio_data.append(data.copy())  # Copy to avoid reference issues
+                        self.audio_data.append(data.copy())
 
         except Exception as e:
             self.error(f"Recording thread error: {e}")
+
         finally:
-            # CRITICAL: Explicitly close recorder to release COM objects
-            try:
-                if recorder is not None:
+            # Cleanup in correct order
+            if recorder is not None:
+                try:
                     recorder.__exit__(None, None, None)
-            except Exception as e:
-                self.debug(f"Error closing recorder: {e}")
-            
-            # Release recorder reference
+                    self.debug("Recorder context exited cleanly")
+                except Exception as e:
+                    self.debug(f"Error exiting recorder context: {e}")
+
             recorder = None
-            
-            with self._lock:
-                self.is_recording = False
-            
-            # Uninitialize COM thread
-            try:
-                pythoncom.CoUninitialize()
-            except:
-                pass
-            
-            # Force garbage collection to clean up any remaining COM references
-            import gc
+
+            if com_initialised:
+                try:
+                    pythoncom.CoUninitialize()
+                    self.debug("COM uninitialised on recording thread")
+                except Exception as e:
+                    self.debug(f"Error uninitialising COM: {e}")
+
+            self.is_recording = False
             gc.collect()
-            
-            self.debug(f"Recording thread ended. Chunks collected: {len(self.audio_data)}")
+            self.debug("Recording thread cleanup complete")
 
     def stop(self) -> None:
         """Stop recording gracefully."""
         self.debug("Audio Recorder: Stop (Windows)")
 
+        self.is_recording = False
+
+        # Release device reference
         with self._lock:
             self.mic = None
-            if not self.is_recording:
-                # Thread may have exited on its own (e.g., due to error or short recording)
-                # This is not an error condition
-                self.debug("Recording already stopped")
-                return
 
-            self.is_recording = False
-
-        # Wait for thread to finish, but use a shorter timeout to prevent UI blocking
-        if self.record_thread and self.record_thread.is_alive():
-            self.record_thread.join(timeout=2)  # Reduced from 5s to allow faster UI recovery
-            if self.record_thread.is_alive():
-                self.warning("Recording thread did not terminate within 2 seconds")
-        
-        self.record_thread = None
-        
-        # CRITICAL: Release COM objects immediately to unblock Windows message queue
-        with self._lock:
-            self.mic = None
-        
-        # Force garbage collection to ensure COM cleanup
-        import gc
         gc.collect()
-        
-        self.debug("Recording stopped, thread joined, COM objects released")
+
+        # Wait for recording thread to finish
+        self._wait_for_thread(timeout=3)
 
     def get_output_audio(self) -> Path:
         """Get and return the compressed audio file."""
+
+        # Copy audio data safely
         with self._lock:
             if self.audio_file is None:
                 raise RuntimeError("No audio file was created")
-            
+
             audio_file = self.audio_file
             audio_chunks = self.audio_data.copy()
             self.audio_data = []
-        
+
         if len(audio_chunks) == 0:
-            # Recording may have been too short or thread exited early
-            self.warning("No audio data was recorded - recording may have been interrupted or too short")
+            self.warning("No audio data was recorded - recording may have been interrupted")
             raise RuntimeError("No audio data recorded")
 
-        # Concatenate chunks and write WAV file
+        # Concatenate and write audio
         try:
-            if len(audio_chunks) == 0:
-                raise RuntimeError("No audio data to write")
-            
             self.debug(f"Concatenating {len(audio_chunks)} audio chunks")
             audio_data = np.vstack(audio_chunks)
-            
-            # CRITICAL: Normalize to prevent clipping
-            # soundcard returns f32 in range [-1.0, 1.0], but hot signals can exceed this
+
+            # Normalise to prevent clipping
             max_val = np.max(np.abs(audio_data))
             self.debug(f"Audio peak level: {max_val:.3f}")
-            
+
             if max_val > 1.0:
-                self.warning(f"Audio clipped (peak: {max_val:.3f}). Normalizing to prevent distortion...")
-                audio_data = audio_data / max_val  # Scale down to fit in [-1.0, 1.0]
-            
-            # Add 3 dB headroom to prevent compression artifacts
-            # This matches loudness perceptually but gives the compressor headroom
-            audio_data = audio_data * 0.7  # 0.7 ≈ -3.1 dB
-            
-            # Ensure values are strictly within valid range for WAV output
+                self.warning(f"Audio clipped (peak: {max_val:.3f}). Normalising...")
+                audio_data = audio_data / max_val
+
+            # Add ~3 dB headroom for compression
+            audio_data = audio_data * 0.7
+
+            # Clip to valid range
             audio_data = np.clip(audio_data, -1.0, 1.0)
-            
-            self.debug(f"Writing audio: shape={audio_data.shape}, dtype={audio_data.dtype}, peak={np.max(np.abs(audio_data)):.3f}")
+
+            self.debug(f"Writing audio: shape={audio_data.shape}, peak={np.max(np.abs(audio_data)):.3f}")
             sf.write(
                 audio_file,
                 audio_data,
@@ -237,15 +182,21 @@ class WindowsAudioRecorder(AbstractAudioRecorder):
                 subtype="FLOAT",
             )
             self.debug(f"Audio file written to {audio_file}")
+
+            # Clear chunks from memory
+            audio_chunks = []
+
         except Exception as e:
             raise RuntimeError(f"Failed to write audio file: {e}")
+        finally:
+            gc.collect()
 
         # Compress to Opus
         return self.compress_audio(audio_file)
 
     @staticmethod
     def _select_loopback_device():
-        """Find WASAPI loopback device."""
+        """Find WASAPI loopback device. Must be called with COM initialised."""
         speaker = sc.default_speaker()
         if not speaker:
             raise RuntimeError("No default speaker found")
@@ -262,9 +213,281 @@ class WindowsAudioRecorder(AbstractAudioRecorder):
         if name_match:
             return name_match
 
-        # Fallback: first loopback device
+        # Fallback: first loopback device with "loopback" in name
         lb_match = next(
             (m for m in loopbacks if "loopback" in m.name.lower()),
             None,
         )
         return lb_match or loopbacks[0]
+
+    def __enter__(self):
+        """Context manager support for automatic cleanup."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Ensure cleanup on context manager exit."""
+        self.stop()
+        return False
+
+    
+# """
+# Windows audio recorder using WASAPI loopback via soundcard.
+# Merges the working recordingClasses.py pattern into the modular structure.
+
+# Dependencies: soundcard, soundfile, pywin32
+# """
+
+# import threading
+# import gc
+# from pathlib import Path
+# from typing import Optional
+
+# import pythoncom
+# import soundcard as sc
+# import soundfile as sf
+# import numpy as np
+
+# from .audio_recorder import AbstractAudioRecorder, AudioConfigProtocol
+
+
+# class WindowsAudioRecorder(AbstractAudioRecorder):
+#     """Records system audio on Windows using WASAPI loopback."""
+
+#     def __init__(self, config: AudioConfigProtocol):
+#         super().__init__(config)
+#         self.audio_file: Optional[Path] = None
+#         self._lock = threading.Lock()
+#         self._output_dir = Path(config.output_dir)
+#         self._output_dir.mkdir(parents=True, exist_ok=True)
+
+#         self.audio_data = []
+#         self.is_recording = False
+#         self.record_thread: Optional[threading.Thread] = None
+#         self.mic = None
+#         self._stop_event: Optional[threading.Event] = None
+
+#     def start(self, stop_event: threading.Event = None):
+#         """Start recording system audio using WASAPI loopback."""
+#         self.debug("Audio Recorder: Start (Windows)")
+
+#         with self._lock:
+#             if self.is_recording:
+#                 raise RuntimeError("Recording already in progress")
+
+#         # CRITICAL: Device selection ONLY — COM init/uninit scoped here
+#         try:
+#             pythoncom.CoInitialize()
+#             try:
+#                 self.mic = self._select_loopback_device()
+#                 self.debug(f"Using device: {self.mic.name}")
+#             finally:
+#                 # Release COM immediately after device selection
+#                 pythoncom.CoUninitialize()
+#         except Exception as e:
+#             raise RuntimeError(f"Failed to initialise audio device: {e}")
+
+#         # Now start recording thread with its own COM context
+#         with self._lock:
+#             self.audio_file = self._output_dir / f"{self.config.timestamp}.wav"
+#             self.audio_data = []
+#             self._stop_event = stop_event
+#             self.is_recording = True
+
+#         try:
+#             self.record_thread = threading.Thread(
+#                 target=self._record_loop,
+#                 daemon=False,
+#             )
+#             self.record_thread.start()
+#             self.debug("Recording thread started")
+
+#         except Exception as e:
+#             with self._lock:
+#                 self.is_recording = False
+#                 self.audio_data = []
+#                 self.mic = None
+
+#             raise RuntimeError(f"Failed to start recording thread: {e}")
+
+#     def _record_loop(self):
+#         """Recording thread loop with its own COM context."""
+#         recorder = None
+#         com_initialised = False
+
+#         try:
+#             # Initialize COM on this thread only
+#             pythoncom.CoInitialize()
+#             com_initialised = True
+#             self.debug("COM initialised on recording thread")
+
+#             # Create recorder
+#             recorder = self.mic.recorder(
+#                 samplerate=self.config.sample_rate,
+#                 blocksize=4096,
+#             )
+#             recorder.__enter__()
+#             self.debug("Recorder ready")
+
+#             # Main recording loop
+#             while self.is_recording:
+#                 # Check external stop event
+#                 if self._stop_event and self._stop_event.is_set():
+#                     self.debug("Stop event received in record loop")
+#                     break
+
+#                 try:
+#                     data = recorder.record(numframes=4096)
+#                 except Exception as e:
+#                     self.error(f"Error recording block: {e}")
+#                     break
+
+#                 if data is None or len(data) == 0:
+#                     self.debug("No data from recorder, stopping")
+#                     break
+
+#                 # Store chunk safely
+#                 with self._lock:
+#                     if self.is_recording:
+#                         self.audio_data.append(data.copy())
+
+#         except Exception as e:
+#             self.error(f"Recording thread error: {e}")
+
+#         finally:
+#             # Cleanup in correct order
+#             if recorder is not None:
+#                 try:
+#                     recorder.__exit__(None, None, None)
+#                     self.debug("Recorder context exited cleanly")
+#                 except Exception as e:
+#                     self.debug(f"Error exiting recorder context: {e}")
+
+#             recorder = None
+
+#             if com_initialised:
+#                 try:
+#                     pythoncom.CoUninitialize()
+#                     self.debug("COM uninitialised on recording thread")
+#                 except Exception as e:
+#                     self.debug(f"Error uninitialising COM: {e}")
+
+#             with self._lock:
+#                 self.is_recording = False
+
+#             gc.collect()
+#             self.debug("Recording thread cleanup complete")
+
+#     def stop(self) -> None:
+#         """Stop recording gracefully."""
+#         self.debug("Audio Recorder: Stop (Windows)")
+
+#         with self._lock:
+#             if not self.is_recording:
+#                 self.debug("Recording already stopped")
+#                 return
+#             self.is_recording = False
+
+#         # Wait for thread to finish
+#         if self.record_thread and self.record_thread.is_alive():
+#             self.record_thread.join(timeout=3)
+#             if self.record_thread.is_alive():
+#                 self.warning("Recording thread did not terminate within 3 s")
+
+#         self.record_thread = None
+
+#         # Release device reference
+#         with self._lock:
+#             self.mic = None
+
+#         gc.collect()
+#         self.debug("Recording stopped and cleaned up")
+
+#     def get_output_audio(self) -> Path:
+#         """Get and return the compressed audio file."""
+
+#         # Copy audio data safely
+#         with self._lock:
+#             if self.audio_file is None:
+#                 raise RuntimeError("No audio file was created")
+
+#             audio_file = self.audio_file
+#             audio_chunks = self.audio_data.copy()
+#             self.audio_data = []
+
+#         if len(audio_chunks) == 0:
+#             self.warning("No audio data was recorded - recording may have been interrupted")
+#             raise RuntimeError("No audio data recorded")
+
+#         # Concatenate and write audio
+#         try:
+#             self.debug(f"Concatenating {len(audio_chunks)} audio chunks")
+#             audio_data = np.vstack(audio_chunks)
+
+#             # Normalise to prevent clipping
+#             max_val = np.max(np.abs(audio_data))
+#             self.debug(f"Audio peak level: {max_val:.3f}")
+
+#             if max_val > 1.0:
+#                 self.warning(f"Audio clipped (peak: {max_val:.3f}). Normalising...")
+#                 audio_data = audio_data / max_val
+
+#             # Add ~3 dB headroom for compression
+#             audio_data = audio_data * 0.7
+
+#             # Clip to valid range
+#             audio_data = np.clip(audio_data, -1.0, 1.0)
+
+#             self.debug(f"Writing audio: shape={audio_data.shape}, peak={np.max(np.abs(audio_data)):.3f}")
+#             sf.write(
+#                 audio_file,
+#                 audio_data,
+#                 self.config.sample_rate,
+#                 subtype="FLOAT",
+#             )
+#             self.debug(f"Audio file written to {audio_file}")
+
+#             # Clear chunks from memory
+#             audio_chunks = []
+
+#         except Exception as e:
+#             raise RuntimeError(f"Failed to write audio file: {e}")
+#         finally:
+#             gc.collect()
+
+#         # Compress to Opus
+#         return self.compress_audio(audio_file)
+
+#     @staticmethod
+#     def _select_loopback_device():
+#         """Find WASAPI loopback device. Must be called with COM initialised."""
+#         speaker = sc.default_speaker()
+#         if not speaker:
+#             raise RuntimeError("No default speaker found")
+
+#         loopbacks = sc.all_microphones(include_loopback=True)
+#         if not loopbacks:
+#             raise RuntimeError("No loopback devices found")
+
+#         # Try to match loopback to default speaker
+#         name_match = next(
+#             (m for m in loopbacks if speaker.name.lower() in m.name.lower()),
+#             None,
+#         )
+#         if name_match:
+#             return name_match
+
+#         # Fallback: first loopback device with "loopback" in name
+#         lb_match = next(
+#             (m for m in loopbacks if "loopback" in m.name.lower()),
+#             None,
+#         )
+#         return lb_match or loopbacks[0]
+
+#     def __enter__(self):
+#         """Context manager support for automatic cleanup."""
+#         return self
+
+#     def __exit__(self, exc_type, exc_val, exc_tb):
+#         """Ensure cleanup on context manager exit."""
+#         self.stop()
+#         return False

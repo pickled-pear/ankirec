@@ -14,7 +14,8 @@ class KeyListener(ABC, VerboseMixin):
         super().__init__()
         self._listener: keyboard.Listener | None = None
         self._stop_requested = False
-        
+        self._busy = threading.Lock()
+
     @abstractmethod
     def on_press(self, key: keyboard.Key | keyboard.KeyCode | None) -> bool | None:
         """Called on key press. Return False to stop listening."""
@@ -22,6 +23,27 @@ class KeyListener(ABC, VerboseMixin):
     def on_release(self, key: keyboard.Key | keyboard.KeyCode | None) -> bool | None:
         """Called on key release. Does nothing by default."""
         return None
+
+    def run_in_background(self, work) -> bool:
+        """
+        Run `work` on a worker thread so the key callback returns immediately.
+
+        Key presses that arrive while the previous job is still running are
+        ignored. Returns True if the job was started.
+        """
+        if not self._busy.acquire(blocking=False):
+            return False
+
+        def _runner():
+            try:
+                work()
+            except Exception as e:
+                self.error(f"{type(self).__name__} failed: {e}")
+            finally:
+                self._busy.release()
+
+        threading.Thread(target=_runner, daemon=True).start()
+        return True
 
     @property
     def is_listening(self) -> bool:
@@ -121,13 +143,10 @@ class RecordListener(KeyListener):
             key = self.map_to_key(key.vk)
 
         if key in self.target_keys:
-            # Wrap flashcard.on_press() in a try-except to handle interrupts
-            try:
-                self.flashcard.on_press()
-            except KeyboardInterrupt:
-                self.info("Recording interrupted")
-                return False
-        
+            # Never do the work here: on Windows this callback runs inside the
+            # low-level keyboard hook, and blocking it stalls input system-wide.
+            self.run_in_background(self.flashcard.on_press)
+
         return None
 
 class AbortRecordListener(KeyListener):
@@ -144,15 +163,16 @@ class AbortRecordListener(KeyListener):
         if self._stop_requested:
             return False
         
-        if key in self.target_keys:
-            try:
-                self.recorder.abort()
-                self.debug(self.recorder.recording_cycle)
-            except KeyboardInterrupt:
-                self.info("Abort interrupted")
-                return False
-        
+        # Only abort while actually recording, so typing "q" elsewhere
+        # (e.g. in the fields window) does not wipe the media folder.
+        if key in self.target_keys and self.recorder.recording:
+            self.run_in_background(self._abort)
+
         return None
+
+    def _abort(self) -> None:
+        self.recorder.abort()
+        self.debug(self.recorder.recording_cycle)
 
 
 class Parrot(KeyListener):

@@ -8,6 +8,7 @@ from base64 import b64encode
 from ..base.exceptions import AnkiConnectError
 from ..base.config import Config
 from ..base.mixin import VerboseMixin
+from ..base.constants import SCRIPT_DIR
 
 @dataclass
 class AnkiConfig:
@@ -21,7 +22,7 @@ class AnkiConfig:
 
 
 class SharedValues(VerboseMixin):
-    notes_json_file = Path("src")  / "ankirec" / "anki" / "notes.json"
+    notes_json_file = SCRIPT_DIR / "anki" / "notes.json"
     def __init__(self):
         super().__init__()
 

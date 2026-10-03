@@ -319,7 +319,11 @@ def _run(fields: list[dict], title: str,
 
     def _make_auto_resize(text_widget, wrap_frame, win):
         """Return a callback that grows the Text widget and window when lines wrap."""
-        def _resize(e=None):
+        _resize_pending = [False]  # Use list to allow modification in nested function
+
+        def _do_resize():
+            """Perform the actual resize operation."""
+            _resize_pending[0] = False
             try:
                 display_lines = int(text_widget.count("1.0", "end", "displaylines")[0])
                 new_lines = max(TEXT_MIN_LINES, display_lines)
@@ -331,6 +335,13 @@ def _run(fields: list[dict], title: str,
                     ))
             except Exception:
                 pass
+
+        def _resize(e=None):
+            """Debounced resize callback — only schedules one resize per 100 ms."""
+            if not _resize_pending[0]:
+                _resize_pending[0] = True
+                win.after(100, _do_resize)  # Debounce: wait 100 ms before resizing
+
         return _resize
 
     def _focus_text(text_widget):
@@ -419,7 +430,7 @@ def _run(fields: list[dict], title: str,
         path = current_image["path"]
         if path:
             _open_file(path)
-            copy_image_to_clipboard(path)
+            # copy_image_to_clipboard(path)
 
             if not has_retake:
                 return
@@ -431,7 +442,7 @@ def _run(fields: list[dict], title: str,
                     current_image["path"] = reply["path"]
                     if current_image["path"]:
                         _open_file(current_image["path"])
-                        copy_image_to_clipboard(current_image["path"])
+                        # copy_image_to_clipboard(current_image["path"])
 
     # ── Media buttons (image / audio) ─────────────────────────────────────────
     if has_media:

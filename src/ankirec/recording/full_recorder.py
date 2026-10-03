@@ -1,40 +1,15 @@
 from ..base.mixin import *
 from ..base.constants import PLATFORM, SCRIPT_DIR
-# from ..base.universal import timeout_wrapper
 from ..base.config import Config, RecordingConfig
-from .audio_recorder import AudioRecorderFactory
+from .audio_recorder_factory import AudioRecorderFactory
 from .screen_recorder import ScreenshotTaker
 
-from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime
 import threading
 import time
 
 
-    
-
-
-# class FullRecorder(VerboseMixin):
-#     """Handles both recording image and audio"""
- 
-#     def __init__(self):
-#         super().__init__()
-#         self.audio_recorder = LinuxAudioRecorder()
-#         self.screen_recorder = ScreenshotTaker()
-#         self.audio_thread = None
-#         self.screenshot_thread = None
- 
-#     def start_recording(self):
-#         """Start recording with a 2-second timeout"""
-#         try:
-#             self.actually_start_recording()
-#             self.echo("Recording started successfully")
-#         except TimeoutError as e:
-#             self.echo(f"Warning: {e}")
-#             # Optionally clean up threads
-#             self.stop_recording()
- 
 class FullRecorder(VerboseMixin):
     """Handles both recording image and audio"""
 
@@ -70,13 +45,13 @@ class FullRecorder(VerboseMixin):
         now = datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         return RecordingConfig(
-            fps=rec_config.get("fps"),
-            max_duration=rec_config.get("max_duration"),
-            recording_volume_lufs=rec_config.get("recording_volume_lufs"),
-            ffmpeg_compression_factor=rec_config.get("image_compression_factor"),
-            output_image_height_px=rec_config.get("output_image_height_px"),
-            sample_rate=rec_config.get("sample_rate"),
-            bitrate=rec_config.get("bitrate_kbps"),
+            fps=rec_config.get("fps", 10),
+            max_duration=rec_config.get("max_duration", 30),
+            recording_volume_lufs=rec_config.get("recording_volume_lufs", -22),
+            ffmpeg_compression_factor=rec_config.get("image_compression_factor", 6),
+            output_image_height_px=rec_config.get("output_image_height_px", 960),
+            sample_rate=rec_config.get("sample_rate", 48000),
+            bitrate=rec_config.get("bitrate_kbps", 48),
             output_dir=Path(__file__).parent.parent / "temp_storage",
             timestamp=timestamp,
             screenshot_time=rec_config.get("screenshot_time", 0.8),
@@ -84,6 +59,7 @@ class FullRecorder(VerboseMixin):
         )
 
     def start_recording(self) -> None:
+        """Start recording both audio and screenshots."""
         self.info("Beginning recording...")
         self.recording_cycle += 1
         self.recording = True
@@ -94,42 +70,42 @@ class FullRecorder(VerboseMixin):
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         self.config.timestamp = timestamp
         
-        # Start audio thread first
-        self.audio_thread = threading.Thread(
-            target=self.audio_recorder.start,
-            args=(self.stop_event,),  
-            daemon=True
-        )
-        self.audio_thread.start()
+        # Start audio recorder (NOT daemon to prevent early termination)
+        # This calls audio_recorder.start() which blocks until recorder is ready
+        try:
+            self.audio_recorder.start(self.stop_event)
+        except Exception as e:
+            self.error(f"Failed to start audio recorder: {e}")
+            self.recording = False
+            raise
         
-        # Wait 0.5s before starting screenshot thread
-        # This gives parecord time to acquire device before graphics libraries load
-        time.sleep(0.5)
-        
+        # Start screenshot thread (also NOT daemon)
+        # Only start screenshots after audio is ready (avoids COM contention on Windows)
         self.screenshot_thread = threading.Thread(
             target=self.screen_recorder.start,
-            args=(self.stop_event,),  # ALSO pass stop_event here!
-            daemon=True
+            args=(self.stop_event,),
+            daemon=False
         )
         self.screenshot_thread.start()
+        
+        self.debug("Recording started (audio ready, screenshots recording)")
 
     def stop_recording(self) -> tuple[Path, Path]:
-        """Stop recording and clean up threads"""
-        self.info("Stopped!")
+        """Stop recording and clean up threads."""
+        self.info("Stopping recording...")
         end_time = time.time()
         self.stop_event.set()
         
-        # Give threads time to stop gracefully
-        if self.audio_thread and self.audio_thread.is_alive():
-            self.audio_thread.join(timeout=2)
+        # Give threads time to respond to stop event gracefully
+        # screenshot_thread is a background thread, no need to join
         if self.screenshot_thread and self.screenshot_thread.is_alive():
             self.screenshot_thread.join(timeout=2)
         
-    
         audio_file = None
         try:
             self.audio_recorder.stop()
             audio_file = self.audio_recorder.get_output_audio()
+            self.debug(f"Audio file ready: {audio_file}")
         except Exception as e:
             self.error(f"Error stopping audio recorder: {e}")
 
@@ -137,38 +113,34 @@ class FullRecorder(VerboseMixin):
         try:
             self.screen_recorder.stop()
             screenshot = self.screen_recorder.get_output_screenshot()
+            self.debug(f"Screenshot file ready: {screenshot}")
         except Exception as e:
             self.error(f"Error stopping screen recorder: {e}")
 
-
         self.wipe_media_folder(audio_file, screenshot)
-
 
         self.recording = False
         self.info("### Recording Done ###\n")
-        self.recording_cycle+=1
+        self.recording_cycle += 1
         return screenshot, audio_file
 
-
     def abort(self, silent: bool = False) -> bool:
-        """Aborts recording and cleans up threads. Returns the recording state"""
+        """Aborts recording and cleans up threads."""
+        self.warning("ABORTING RECORDING")
         self.recording = False
         self.stop_event.set() 
         
-        if self.audio_thread and self.audio_thread.is_alive():
-            self.audio_thread.join(timeout=1)
+        # Stop screenshot thread gracefully
         if self.screenshot_thread and self.screenshot_thread.is_alive():
             self.screenshot_thread.join(timeout=1)
         
-        print("ABORT")
         self.wipe_media_folder()
         return False
 
-        
     def wipe_media_folder(self, *exclude: Path):
-        """Wipes the media folder of all files, excluding given files. But only if set."""
+        """Wipes the media folder of all files, excluding given files (only if enabled)."""
         if self.config.wipe_media_folder:
-            self.info("Deleting media...")
+            self.info("Cleaning up temporary media files...")
             
             media_path = Path(self.config.output_dir)
             

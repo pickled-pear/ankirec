@@ -46,7 +46,7 @@ DEFAULT_SETTINGS = {
         "record_screen": True,
         "fps": 20,
         "max_duration": 30,
-        "recording_volume_lufs": -20.5,
+        "recording_volume_lufs": -23,
         "blocksize":4096,   #higher on slow computers
         "image_compression_factor": 5,
         "output_image_height_px": 540,

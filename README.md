@@ -15,7 +15,7 @@ A more detailed description of your project. Explain:
 
 - Python 3.10+
 - ffmpeg MUST be on path
-    - run ffmpeg --version anywhere to check
+    - run `ffmpeg -version` anywhere to check
 
 If you are on linux:
 - pulseaudio-utils 

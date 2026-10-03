@@ -202,6 +202,9 @@ class ScreenshotTaker(VerboseMixin):
         self.debug(f"Chose screenshot {target_index} out of {len(self.screenshots)}")
 
         filepath = self.screenshots[target_index].filepath
+
+        # clears self.screenshots when we are done with it
+        self.screenshots = []
         
         # Process the selected screenshot
         return self._process_screenshot(filepath)

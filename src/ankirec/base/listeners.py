@@ -13,6 +13,7 @@ class KeyListener(ABC, VerboseMixin):
     def __init__(self) -> None:
         super().__init__()
         self._listener: keyboard.Listener | None = None
+        self._stop_requested = False
         
     @abstractmethod
     def on_press(self, key: keyboard.Key | keyboard.KeyCode | None) -> bool | None:
@@ -29,6 +30,7 @@ class KeyListener(ABC, VerboseMixin):
     def start_listening(self) -> None:
         """Start listening (creates a new thread each time)."""
         if not self.is_listening:
+            self._stop_requested = False
             self._listener = keyboard.Listener(
                 on_press=self.on_press,
                 on_release=self.on_release,
@@ -37,6 +39,7 @@ class KeyListener(ABC, VerboseMixin):
 
     def stop_listening(self) -> None:
         """Stop listening."""
+        self._stop_requested = True
         if self._listener is not None:
             self._listener.stop()
             self._listener = None
@@ -76,9 +79,10 @@ class ListenerManager(VerboseMixin):
     def keep_alive(self) -> None:
         """Keep the main thread alive until interrupted."""
         try:
-            # Blocks here until _stop_event.set() is called
-            # Returns immediately when set, no polling
-            self._stop_event.wait()
+            # Use a timeout so the main thread periodically wakes up
+            # This helps catch KeyboardInterrupt on Windows more reliably
+            while not self._stop_event.is_set():
+                self._stop_event.wait(timeout=0.1)
         except KeyboardInterrupt:
             self.info("\nShutting down...")
             self.stop_all()
@@ -91,7 +95,6 @@ class RecordListener(KeyListener):
     flashcard: FlashcardManager
 
     def __init__(self,):
-        # super().__init__(verbose=verbose, on=True)
         super().__init__()
         self.flashcard = FlashcardManager()
         self.info("Listening! Press altgr to start")
@@ -104,17 +107,28 @@ class RecordListener(KeyListener):
             elif keyvk == 165: # windows
                 return keyboard.Key.alt_r
             else:
-                return None # returns null 
+                return None
         except AttributeError:
             # if this calls it wasnt alt anyway, return null
             return None
 
     def on_press(self, key):
+        # Check if shutdown was requested
+        if self._stop_requested:
+            return False
+        
         if not isinstance(key, keyboard.Key):
             key = self.map_to_key(key.vk)
 
         if key in self.target_keys:
-            self.flashcard.on_press()
+            # Wrap flashcard.on_press() in a try-except to handle interrupts
+            try:
+                self.flashcard.on_press()
+            except KeyboardInterrupt:
+                self.info("Recording interrupted")
+                return False
+        
+        return None
 
 class AbortRecordListener(KeyListener):
     """Class that listens to abort recording"""
@@ -126,18 +140,33 @@ class AbortRecordListener(KeyListener):
         self.recorder = FullRecorder()
 
     def on_press(self, key):
+        # Check if shutdown was requested
+        if self._stop_requested:
+            return False
+        
         if key in self.target_keys:
-            self.recorder.abort()
-            self.debug(self.recorder.recording_cycle)
+            try:
+                self.recorder.abort()
+                self.debug(self.recorder.recording_cycle)
+            except KeyboardInterrupt:
+                self.info("Abort interrupted")
+                return False
+        
+        return None
 
 
 class Parrot(KeyListener):
     """Prints the key that was pressed"""
     def on_press(self, key):
+        if self._stop_requested:
+            return False
+        
         print(f"""{key} was pressed\n{key.vk}""")
         if not isinstance(key, keyboard.Key):
             # print("NOT A KEY")
             pass
+        
+        return None
 
 if __name__ == "__main__":
     manager = ListenerManager()

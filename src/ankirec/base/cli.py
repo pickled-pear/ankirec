@@ -1,9 +1,6 @@
 import click
 from pathlib import Path
 import sys
-import os
-import json
-
 
 from .listeners import ListenerManager, RecordListener, AbortRecordListener
 from .constants import APP_NAME
@@ -14,6 +11,7 @@ from .context import verbose_mode
 def verify_location_safety():
     def _bad_dirs() -> set[Path]:
         """Sets dirs to avoid based on os"""
+        print("babagaboosh!")
         if sys.platform == "win32":
             raw = {
                 Path("C:/Windows"),

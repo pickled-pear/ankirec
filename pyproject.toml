@@ -1,12 +1,12 @@
 [project]
 name = "ankirec"
-version = "1.0.1"
+version = "1.0.2"
 readme = "README.md"
 description = "foo bar"
-dependencies = ["click", "pynput", "rich", "requests"]
+dependencies = ["click", "pynput", "rich", "requests", "mss", "pillow"]
 
 [project.optional-dependencies]
-windows = []
+windows = ["soundcard", "soundfile", "pywin32"]
 linux = []
 
 [project.scripts]

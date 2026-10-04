@@ -40,8 +40,7 @@ class FullRecorder(VerboseMixin):
     def _load_config(self) -> RecordingConfig:
         """Loads the values in the config file to the config dataclass"""
         config = Config()
-        config.reset_to_defaults()
-        rec_config = config.load_specific_config("recording")
+        rec_config = config.load_section("recording")
         now = datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         return RecordingConfig(

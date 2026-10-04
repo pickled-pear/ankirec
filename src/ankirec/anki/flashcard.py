@@ -2,11 +2,8 @@ from ..base.mixin import VerboseMixin
 from ..recording.full_recorder import FullRecorder
 from ..anki.anki import AnkiManager
 from ..base.context import verbose_mode
-# from .fields_input_api.input_api import Field, DialogCancelled, InputDialog
-# from .fields_input_api.input_pysimplegui import InputDialog, Field, DialogCancelled
-
-# from .fields_input_api.input_server import DialogCancelled, Field, InputDialog
 from .fields_input_api.input_api import InputDialog, DialogCancelled, Field
+from ..sources.source_manager import Sources
 
 import time
 import threading
@@ -77,6 +74,7 @@ class FlashcardManager(VerboseMixin):
 
             ankimanager = AnkiManager(screenshot=screenshot, audio=audio)
 
+            fields = {}
             try:
                 fields = self.dialog.ask(
                     fields=[
@@ -110,7 +108,7 @@ class FlashcardManager(VerboseMixin):
             ankimanager.move_media_to_anki()
 
             self.info("Adding note...")
-            ankimanager.add_notes_to_json()
+            ankimanager.add_notes_to_json(fields=fields)
 
 
             self.combined_recorder.wipe_media_folder()

@@ -3,12 +3,14 @@ import requests
 import socket
 from pathlib import Path
 from dataclasses import dataclass
+from datetime import date
 from base64 import b64encode
 
 from ..base.exceptions import AnkiConnectError
 from ..base.config import Config
 from ..base.mixin import VerboseMixin
 from ..base.constants import SCRIPT_DIR
+from ..sources.source_manager import Sources
 
 @dataclass
 class AnkiConfig:
@@ -16,6 +18,7 @@ class AnkiConfig:
     auto_clear_folder: bool
     deckname: str
     cardmodel: str
+    cardmodel_fields: list[str]
     anki_profile: str
     ankiconnect_port: int
     ankiconnect_api_ver: int
@@ -129,35 +132,6 @@ class AnkiconnectActions(SharedValues):
         return result
         
 
-    ### OBSOLETE ###
-    # def write_to_anki(self):
-    #     """Reads the contents of the cardUpdates json and sends everything in it to anki"""
-
-
-    #     with open(self.notes_json_file, "r") as f:
-    #         notes_json = json.load(f)
-
-    #     if not notes_json:
-    #         print("[orange]No cards to add")
-    #         return
-
-    #     for note in notes_json:
-    #         note.setdefault("options", {
-    #             "allowDuplicate": True,
-    #             "duplicateScope": "deck"
-    #         })
-
-    #     try:
-    #         result = self.send_to_anki(notes=notes_json)
-    #     except Exception as e:
-    #         print(f"[red]Failed to connect to Anki: {e}")
-    #         return
-
-
-    #     self.wipe_json()
-    #     print("[#18f900]Sent to anki")
-            
-
 def is_port_open(port: int, host: str = 'localhost', timeout: float = 1.0) -> bool:
     """
     Check if a port is open and listening on the local machine.
@@ -196,15 +170,25 @@ class AnkiManager(SharedValues):
 
     def load_config(self) -> AnkiConfig:
         config = Config()
-        anki_config = config.load_specific_config("anki")
+        anki_config = config.load_section("anki")
+        if not anki_config.get("deckname") or not anki_config.get("cardmodel"):
+            raise ValueError("Deckname and Cardmodel must be provided")
+        
+        cardmodel_fields=anki_config.get("cardmodel_fields", [])
+        if not "Image" in cardmodel_fields:
+            raise ValueError("Your cardmodel must include a field called Image")
+        if not "SentenceAudio" in cardmodel_fields:
+            raise ValueError("Your cardmodel must include a field called SentenceAudio")
+        
         return AnkiConfig(
-            instant_send=anki_config.get("instant_send"),
-            auto_clear_folder=anki_config.get("auto_clear_folder"),
-            deckname=anki_config.get("deckname"),
-            cardmodel= anki_config.get("cardmodel"),
-            anki_profile=anki_config.get("anki_profile"),
-            ankiconnect_port=anki_config.get("ankiconnect_port"),
-            ankiconnect_api_ver=anki_config.get("ankiconnect_api_ver")
+            instant_send=anki_config.get("instant_send", False),
+            auto_clear_folder=anki_config.get("auto_clear_folder", True),
+            deckname=anki_config.get("deckname", ""),
+            cardmodel= anki_config.get("cardmodel", ""),
+            cardmodel_fields=cardmodel_fields,
+            anki_profile=anki_config.get("anki_profile", "User1"),
+            ankiconnect_port=anki_config.get("ankiconnect_port", 8765),
+            ankiconnect_api_ver=anki_config.get("ankiconnect_api_ver", 6)
         )
 
 
@@ -223,45 +207,63 @@ class AnkiManager(SharedValues):
 
     
 
-    def add_notes_to_json(self, fields: dict = {}):
+    def add_notes_to_json(
+        self,
+        fields: dict | None = None,
+        **kwargs,
+    ):
         """Adds the given data as a note to notes.json. Sends them to anki if setting enabled"""
 
-        screenshot_str = f"""<img src="{self.screenshot.name}">""" if self.screenshot.name else ""
-        audio = self.audio.name if self.audio.name else ""
+        self.config = self.load_config() # reloads the config in case there were any changes
+        source = Sources.get_selected_source_name()
 
-        # TEMP
-        tagarr = []
+        # Media fields, only included if the media actually exists
+        note_fields = {}
+        if self.screenshot.name:
+            note_fields["Image"] = f'<img src="{self.screenshot.name}">'
+        if self.audio.name:
+            note_fields["SentenceAudio"] = f"[sound:{self.audio.name}]"
+
+        # Caller-supplied fields: dict first, then keyword args on top
+        note_fields.update(fields or {})
+        note_fields.update(kwargs)
+
+        note_fields["Date"] = date.today().isoformat()
+        note_fields["Source"] = source
+
+        tags = ["ankirec", source]
+
         note_json = {
-                "deckName":"Core::Mining::Central",
-                "modelName":"MiningCard",
-                "fields":{
-                    "Word":"tempword",
-                    "Image":screenshot_str,
-                    "SentenceAudio":f"[sound:{audio}]",
-                },
-                "tags":tagarr
+            "deckName": self.config.deckname,
+            "modelName": self.config.cardmodel,
+            "fields": note_fields,
+            "tags": tags
         }
 
-        # read existing notes
-        with open(self.notes_json_file, "r") as file:
-            existing_notes = json.load(file)
+        # Read existing notes, tolerating a missing or corrupt file
+        try:
+            with open(self.notes_json_file, "r", encoding="utf-8") as file:
+                existing_notes = json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            existing_notes = []
 
         existing_notes.append(note_json)
         self.debug(f"{len(existing_notes)} notes")
 
         # adds to the json
-        with open(self.notes_json_file, "w") as file:
+        with open(self.notes_json_file, "w", encoding="utf-8") as file:
             json.dump(existing_notes, file, indent=4, ensure_ascii=False)
 
-        self.debug(f"instant_send: {True}")
         if self.config.instant_send:
             self.info("Sending notes...")
-            result = self.actions.send_notes_to_anki()
-            if not result.get("error"):
-                self.info("Sent notes!")
+            result = self.actions.send_notes_to_anki() or {}
+            error = result.get("error")
+            if error:
+                self.error(f"Error: {error}")
             else:
-                self.error(f"Error: {result.get("error")}")
-                
+                self.info("Sent notes!")
+
+        return note_json
 
 
 if __name__ == "__main__":

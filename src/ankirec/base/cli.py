@@ -1,17 +1,19 @@
 import click
 from pathlib import Path
+from rich import print
 import sys
 
 from .listeners import ListenerManager, RecordListener, AbortRecordListener
 from .constants import APP_NAME
 from .config import Config
 from .context import verbose_mode
+from ..anki.anki import AnkiconnectActions
+from ..sources.source_manager import Sources
 
 
 def verify_location_safety():
     def _bad_dirs() -> set[Path]:
         """Sets dirs to avoid based on os"""
-        print("babagaboosh!")
         if sys.platform == "win32":
             raw = {
                 Path("C:/Windows"),
@@ -34,6 +36,10 @@ def verify_location_safety():
     if cwd == cwd.parent or any(cwd.is_relative_to(bad) for bad in BAD_DIRS):
         raise click.UsageError(f"Bad working directory: {cwd}")
 
+def success_message(*args):
+    string = " ".join(f"[green]{a}[/green]" for a in args).strip()
+    print(string)
+
 @click.group
 def cli():
     """The main function that starts the tool"""
@@ -53,7 +59,15 @@ def record(verbose):
     listener_manager.keep_alive()
 
 
-
+@cli.command(name="send-notes")
+@click.option("--verbose", is_flag=True, default=False, help="Verbose flag")
+def sendnotes(verbose):
+    """Sends the contents of notes.json to anki"""
+    verbose_mode.set(verbose)
+    ankiconfig = Config().load_section("anki")
+    ankiactions = AnkiconnectActions(port=ankiconfig.get("ankiconnect_port", 8765), api_ver=ankiconfig.get("ankiconnect_api_ver", 6))
+    ankiactions.send_notes_to_anki()
+    success_message("Sent notes")
 
 @cli.group
 def source():
@@ -85,6 +99,14 @@ def move_source():
 def delete_object(chosen_object):
     """Deletes the given object. Deleting a folder deletes all children"""
     raise NotImplementedError
+
+@source.command(name="set")
+@click.argument("source")
+def set_source(source: str):
+    """Sets the active source (WIP)"""
+    source_manager = Sources()
+    source_manager.set_value("selected", source)
+    success_message("Successfully set source")
 
 # continue source commands...
 

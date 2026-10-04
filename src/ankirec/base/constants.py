@@ -39,6 +39,7 @@ DEFAULT_SETTINGS = {
         # ],
         "deckname": "Core::Mining::Central",
         "cardmodel": "MiningCard",
+        "cardmodel_fields": ["Word", "Reading", "Definition", "Sentence", "Notes", "Image", "Date", "Source", "SentenceAudio", "WordAudio"],
         "anki_profile":"Main",
         "ankiconnect_port":8765,
         "ankiconnect_api_ver": 6

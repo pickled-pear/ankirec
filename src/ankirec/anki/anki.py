@@ -5,11 +5,14 @@ from pathlib import Path
 from dataclasses import dataclass
 from datetime import date
 from base64 import b64encode
+# from click import get_app_dir
+from typing import Optional
 
 from ..base.exceptions import AnkiConnectError
 from ..base.config import Config
 from ..base.mixin import VerboseMixin
 from ..base.constants import SCRIPT_DIR
+from ..base.json_manager import JsonManager
 from ..sources.source_manager import Sources
 
 @dataclass
@@ -24,8 +27,26 @@ class AnkiConfig:
     ankiconnect_api_ver: int
 
 
+class NotesJson(JsonManager):
+    _filename = "notes"
+    defaults = {}
+    def __init__(self, filename: str = "notes"):
+        super().__init__()
+        self._filename = filename
+
+    @property
+    def filename(self) -> str:
+        return self._filename
+
+    @property
+    def notes_path(self) -> Path:
+        return self.file_path
+
+
 class SharedValues(VerboseMixin):
     notes_json_file = SCRIPT_DIR / "anki" / "notes.json"
+    notes_json_filename = "notes"
+    notes_json_manager = NotesJson()
     def __init__(self):
         super().__init__()
 
@@ -83,20 +104,22 @@ class AnkiconnectActions(SharedValues):
     def send_notes_to_anki(self) -> None:
         """Adds the contents of notes.json to anki itself"""
         if is_port_open(self.port):
-            with open(self.notes_json_file, "r") as f:
-                notes_json = json.load(f)
+            # with open(self.notes_json_file, "r") as f:
+            #     notes_json = json.load(f)
+            notes_json = self.notes_json_manager.load()
+            notes_array = notes_json.get("notes", [])
 
             if not notes_json:
                 self.warning("No notes found")
                 return
 
-            for note in notes_json:
+            for note in notes_array:
                 note.setdefault("options", {
                     "allowDuplicate": True,
                     "duplicateScope": "deck"
                 })
             # uses api to send the notes
-            result = self._invoke("addNotes", notes=notes_json)
+            result = self._invoke("addNotes", notes=notes_array)
             if not result.get("error"):
                 self.wipe_json()
                 
@@ -110,8 +133,9 @@ class AnkiconnectActions(SharedValues):
         self.ANKI_CONNECT_URL = f"http://localhost:{self.port}"
 
     def wipe_json(self):
-        with open(self.notes_json_file, "w") as file:
-            json.dump([], file)
+        # with open(self.notes_json_file, "w") as file:
+        #     json.dump([], file)
+        self.notes_json_manager.save({})
 
         self.info("Note json cleared")
 
@@ -232,6 +256,7 @@ class AnkiManager(SharedValues):
         note_fields["Source"] = source
 
         tags = ["ankirec", source]
+        tags = [tag for tag in tags if tag] # removes empty tags
 
         note_json = {
             "deckName": self.config.deckname,
@@ -242,17 +267,23 @@ class AnkiManager(SharedValues):
 
         # Read existing notes, tolerating a missing or corrupt file
         try:
-            with open(self.notes_json_file, "r", encoding="utf-8") as file:
-                existing_notes = json.load(file)
+            # with open(self.notes_json_file, "r", encoding="utf-8") as file:
+            #     existing_notes = json.load(file)
+            existing_notes = self.notes_json_manager.load()
         except (FileNotFoundError, json.JSONDecodeError):
-            existing_notes = []
+            self.error("No existing notes found. Using empty array")
+            existing_notes = {}
 
-        existing_notes.append(note_json)
+        notes_array = existing_notes.get("notes", [])
+
+        notes_array.append(note_json)
+        existing_notes["notes"] = notes_array
         self.debug(f"{len(existing_notes)} notes")
 
         # adds to the json
-        with open(self.notes_json_file, "w", encoding="utf-8") as file:
-            json.dump(existing_notes, file, indent=4, ensure_ascii=False)
+        # with open(self.notes_json_file, "w", encoding="utf-8") as file:
+        #     json.dump(existing_notes, file, indent=4, ensure_ascii=False)
+        self.notes_json_manager.save(existing_notes)
 
         if self.config.instant_send:
             self.info("Sending notes...")

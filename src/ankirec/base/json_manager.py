@@ -57,6 +57,10 @@ class JsonManager(ABC):
     def load(self) -> dict:
         """Load from disk, merged over the defaults."""
         data = copy.deepcopy(self.defaults)
+        if not isinstance(data, dict):
+            raise TypeError(
+                f"{type(self).__name__}.defaults must return a dict, got {type(data).__name__}"
+            )
         if self.exists():
             try:
                 with open(self.file_path, "r", encoding="utf-8") as f:
@@ -94,7 +98,7 @@ class JsonManager(ABC):
     def save(self, data: dict) -> None:
         """Write to file and clear the cache."""
         with open(self.file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+            json.dump(data, f, indent=2, ensure_ascii=False)
         self.invalidate_cache()
  
     def set_value(self, key: str, value: Any) -> None:

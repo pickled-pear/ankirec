@@ -14,6 +14,7 @@ class Sources(JsonManager):
     """Handles the sources feature, intended to help you organise anki cards created"""
     filename = "sources"
     defaults = {"selected": ""}
+
     def __init__(self):
         super().__init__()
  
@@ -25,6 +26,7 @@ class Sources(JsonManager):
  
     @property
     def source_file(self) -> Path:
+        """NOT DONE"""
         return self.file_path
  
     @staticmethod

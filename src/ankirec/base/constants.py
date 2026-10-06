@@ -17,12 +17,11 @@ def _get_platform() -> UserPlatform:
         "darwin": UserPlatform.MAC,
     }
     found_platform = LOOKUP.get(platformstring, UserPlatform.UNRECOGNISED)
-    return found_platform.value
+    return found_platform
 
 PLATFORM = _get_platform()
 APP_NAME = "ankirec"
 SCRIPT_DIR = Path(__file__).parent.parent
-print(SCRIPT_DIR)
 
 DEFAULT_SETTINGS = {
     # CHECK FOR UNUSED SETTINGS ME

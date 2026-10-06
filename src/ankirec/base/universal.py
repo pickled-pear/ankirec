@@ -5,12 +5,12 @@ import threading
 import sys
 
 from .mixin import VerboseMixin
-from .constants import PLATFORM
+from .constants import PLATFORM, UserPlatform
 
-if PLATFORM == "windows":
+if PLATFORM == UserPlatform.WINDOWS:
     import msvcrt
-elif PLATFORM == "linux":
-    import termios
+# elif PLATFORM == UserPlatform.LINUX:
+#     import termios
 
 
 # def warn(*args):
@@ -43,6 +43,8 @@ class Timer(VerboseMixin):
 
 def timeout_wrapper(timeout_seconds):
     """
+    DO NOT USE
+    
     Function decorator that enforces a maximum execution time using a timer,
     not a separate thread. Works correctly with instance methods called from
     event listeners or other threads.
@@ -104,7 +106,7 @@ def timeout_wrapper(timeout_seconds):
 
 def flush_input(max_flush=5000):
     """Used to flush the terminal to prevent strange input issues. Might not be needed on out of windwos"""
-    if PLATFORM == "windows":
+    if PLATFORM == UserPlatform.WINDOWS:
         flushcount = 0
         while msvcrt.kbhit() and flushcount < max_flush:
             msvcrt.getch()

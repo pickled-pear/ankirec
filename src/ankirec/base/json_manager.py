@@ -5,10 +5,9 @@ from pathlib import Path
 from typing import Any, Optional
  
 import click
-from click import get_app_dir
  
 # Project imports - adjust to match your package layout:
-from .constants import APP_NAME
+from .constants import APP_NAME, PLATFORM, UserPlatform
  
  
 class JsonManager(ABC):
@@ -39,7 +38,7 @@ class JsonManager(ABC):
     @staticmethod
     def build_path(filename: str) -> Path:
         """Get the json file path, creating the app directory if needed."""
-        app_dir = Path(get_app_dir(APP_NAME))
+        app_dir = Path(click.get_app_dir(APP_NAME))
         app_dir.mkdir(parents=True, exist_ok=True)
         return app_dir / f"{filename}.json"
  
@@ -51,6 +50,20 @@ class JsonManager(ABC):
         """Delete the json file and clear the cache."""
         self.file_path.unlink(missing_ok=True)
         self.invalidate_cache()
+
+    def open_json_file(self) -> None:
+        """Opens the json in the default text editor"""
+        if PLATFORM == UserPlatform.WINDOWS:
+            import os
+            os.startfile(self.file_path)
+        elif PLATFORM == UserPlatform.MAC:
+            import subprocess
+            subprocess.run(["open", self.file_path], check=True)
+        elif PLATFORM == UserPlatform.LINUX:
+            import subprocess
+            subprocess.run(["xdg-open", self.file_path], check=True)
+        else:
+            click.echo("Unrecognised os. Cannot open json.")
  
     # ---- Reading ----------------------------------------------------------
  
@@ -92,7 +105,19 @@ class JsonManager(ABC):
                 raise KeyError(f"Key not found: {key}")
             value = value[k]
         return value
- 
+
+    def get_value_recursively(self, target_key: str, data: dict):
+        """Recursively searches the json to find the key and returns its value"""
+        for key, value in data.items():
+            if key == str(target_key):
+                return value
+            else:
+                if isinstance(value, dict):
+                    result = self.get_value_recursively(target_key=target_key, data=value)
+                    if result:
+                        return result
+        return None
+
     # ---- Writing ----------------------------------------------------------
  
     def save(self, data: dict) -> None:
@@ -101,7 +126,7 @@ class JsonManager(ABC):
             json.dump(data, f, indent=2, ensure_ascii=False)
         self.invalidate_cache()
  
-    def set_value(self, key: str, value: Any) -> None:
+    def set_value(self, key: str, value: Any) -> bool:
         """Set a single value. Supports dot notation, e.g. "general.theme"."""
         data = copy.deepcopy(self.get())
         *parents, last = key.split(".")
@@ -110,6 +135,19 @@ class JsonManager(ABC):
             target = target.setdefault(k, {})
         target[last] = value
         self.save(data)
+        return True
+
+    def set_value_recursively(self, target_key: str, new_value, data: dict) -> bool:
+        """Recursively searches the json to find the key and sets its value.
+        Returns True if the key was found and updated, otherwise False."""
+        for key, value in data.items():
+            if key == str(target_key):
+                data[key] = new_value
+                return data
+            if isinstance(value, dict):
+                if self.set_value_recursively(target_key=target_key, new_value=new_value, data=value):
+                    return data
+        raise KeyError(f"Could not find key {target_key} in config")
  
     def reset_to_defaults(self) -> None:
         """Reset everything to its default value."""

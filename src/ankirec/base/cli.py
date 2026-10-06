@@ -1,6 +1,8 @@
 import click
 from pathlib import Path
 from rich import print
+from rich.table import Table
+from rich.console import Console
 import sys
 
 from .listeners import ListenerManager, RecordListener, AbortRecordListener
@@ -40,7 +42,25 @@ def success_message(*args):
     string = " ".join(f"[green]{a}[/green]" for a in args).strip()
     print(string)
 
+
+def display_table(title: str, cols: list, *rows, show_lines: bool = True):
+    # If called with a single argument that is itself a list of rows,
+    # unwrap it so both calling styles work.
+    if len(rows) == 1 and rows[0] and isinstance(rows[0], (list, tuple)) \
+            and isinstance(rows[0][0], (list, tuple)):
+        rows = rows[0]
+
+    table = Table(title=title, show_lines=show_lines)
+    for col in cols:
+        table.add_column(str(col))
+
+    for row in rows:
+        table.add_row(*(str(c) for c in row))
+
+    Console().print(table)
+
 @click.group
+@click.version_option()
 def cli():
     """The main function that starts the tool"""
     verify_location_safety()
@@ -68,6 +88,9 @@ def sendnotes(verbose):
     ankiactions = AnkiconnectActions(port=ankiconfig.get("ankiconnect_port", 8765), api_ver=ankiconfig.get("ankiconnect_api_ver", 6))
     ankiactions.send_notes_to_anki()
     success_message("Sent notes")
+
+
+
 
 @cli.group
 def source():
@@ -118,22 +141,41 @@ def config():
 
 @config.command(name="list")
 # @click.option("--type")
-@click.option("--key", help="Specifc key to show history for (none by default)")
+@click.option("--key", help="Specifc key to show config for (none by default)")
 def list_config(key):
     """Lists all settings with their current values"""
-    raise NotImplementedError
+    cols = ["Name", "Value"]
+    config = Config()
+    if key:
+        value = config.get_value_recursively(target_key=key, data=config.load())
+        row = [key, value]
+        display_table("List Config", cols, row)
+    else:
+        config_data = config.get()
+        for name, section in config_data.items():
+            rows = [[key, value] for key, value in section.items()]
+            display_table(name, cols, rows)
+
 
 @config.command(name="open")
 def open_config():
-    """Opens the history json in a the default text editor"""
-    raise NotImplementedError
+    """Opens the config json in a the default text editor"""
+    config = Config()
+    config.open_json_file()
 
 @config.command(name="set")
 @click.argument("setting")
 @click.argument("value")
 def set_value(setting, value):
-    """Update a given setting"""
-    raise NotImplementedError
+    """Update a given setting. Use . notation to specifiy section, eg anki.deckname"""
+    config = Config()
+    if "." in setting:
+        config.set_value(setting, value)
+    else:
+        # need to recursively search for the key
+        result_json = config.set_value_recursively(setting, value, config.load())
+        config.save(result_json)
+
 
 @config.command(name="reset")
 def reset_to_default():

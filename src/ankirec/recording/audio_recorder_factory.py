@@ -1,4 +1,4 @@
-from ..base.constants import PLATFORM
+from ..base.constants import PLATFORM, UserPlatform
 from .audio_recorder import AudioConfigProtocol, AbstractAudioRecorder
 
 class AudioRecorderFactory:
@@ -7,11 +7,11 @@ class AudioRecorderFactory:
     @staticmethod
     def create(config: AudioConfigProtocol) -> AbstractAudioRecorder:
         """Create recorder for current platform. Only imports module relevant to platform."""
-        if PLATFORM == "windows":
+        if PLATFORM == UserPlatform.WINDOWS:
             from .audio_windows import WindowsAudioRecorder
             return WindowsAudioRecorder(config)
-        elif PLATFORM == "linux":
+        elif PLATFORM == UserPlatform.LINUX:
             from .audio_linux import LinuxAudioRecorder
             return LinuxAudioRecorder(config)
         else:
-            raise NotImplementedError(f"Platform {PLATFORM} not supported")
+            raise NotImplementedError(f"Platform {PLATFORM.value} not supported")

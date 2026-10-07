@@ -4,6 +4,7 @@ from rich import print
 from rich.table import Table
 from rich.console import Console
 import sys
+import copy
 
 from .listeners import ListenerManager, RecordListener, AbortRecordListener
 from .constants import APP_NAME
@@ -59,6 +60,14 @@ def display_table(title: str, cols: list, *rows, show_lines: bool = True):
 
     Console().print(table)
 
+
+def _run(action, *args, **kwargs):
+    """Runs an action, turning its errors into a clean CLI message."""
+    try:
+        return action(*args, **kwargs)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from None
+
 @click.group
 @click.version_option()
 def cli():
@@ -96,90 +105,139 @@ def sendnotes(verbose):
 def source():
     """Manage the source options"""
 
+
 @source.command(name="list")
-@click.option("--folder", help="Folder to list. None by default")
-def list_sources(folder):
-    """Lists all sources"""
-    raise NotImplementedError
+@click.option("--folder", default="root", help="Folder to list. Root by default")
+@click.option("--recurse", is_flag=True, default=False, help="Also list everything in subfolders")
+def list_sources(folder: str, recurse: bool):
+    """Lists all sources in the given folder"""
+    sources = Sources()
+    items = _run(sources.list_items, folder, recurse=recurse)
+    if not items:
+        click.echo(f"{folder} is empty")
+        return
+    marker = sources.selected
+    cols = ["Name", "Type", "Selected"]
+    rows = []
+    for item in items:
+        path = item.full_path.removeprefix("root/")
+        rows.append([path if recurse else item.name, item.item_type.value, "*" if path == marker else ""])
+    display_table(folder, cols, rows)
+
+
+@source.command(name="open")
+def open_config():
+    """Opens the config json in the default text editor"""
+    Sources().open_json_file()
+
 
 @source.command(name="add")
-@click.argument("source")
+@click.argument("name")
 @click.argument("folder")
-def add_source(source, folder):
-    """Adds a source at the given location"""
-    raise NotImplementedError
+@click.argument("item_type", type=click.Choice(["source", "folder"], case_sensitive=False))
+def add_source(name: str, folder: str, item_type: str):
+    """Adds a source or folder called NAME inside FOLDER"""
+    _run(Sources().add_item, name, folder, item_type)
+    success_message("Added!")
+
 
 @source.command(name="move")
-@click.argument("source")
-@click.argument("old_folder")
+@click.argument("path")
 @click.argument("new_folder")
-def move_source():
-    """Moves a source"""
-    raise NotImplementedError
+def move_source(path: str, new_folder: str):
+    """Moves the item at PATH into NEW_FOLDER"""
+    item = _run(Sources().move_item, path, new_folder)
+    success_message(f"Moved to {item.full_path}")
+
+
+@source.command(name="rename")
+@click.argument("path")
+@click.argument("new_name")
+def rename_source(path: str, new_name: str):
+    """Renames the item at PATH to NEW_NAME"""
+    item = _run(Sources().rename_item, path, new_name)
+    success_message(f"Renamed to {item.full_path}")
+
 
 @source.command(name="delete")
-@click.argument("chosen_object")
-def delete_object(chosen_object):
-    """Deletes the given object. Deleting a folder deletes all children"""
-    raise NotImplementedError
+@click.argument("path")
+def delete_object(path: str):
+    """Deletes the item at PATH. Deleting a folder deletes all children"""
+    item = _run(Sources().delete_item, path)
+    success_message(f"Deleted {item.name}")
+
 
 @source.command(name="set")
-@click.argument("source")
-def set_source(source: str):
-    """Sets the active source (WIP)"""
-    source_manager = Sources()
-    source_manager.set_value("selected", source)
-    success_message("Successfully set source")
-
-# continue source commands...
+@click.argument("path")
+def set_source(path: str):
+    """Sets the active source"""
+    item = _run(Sources().select, path)
+    success_message(f"Active source set to {item.name}")
 
 
+@source.command(name="reset")
+@click.option("--confirm", is_flag=True, default=False, help="Add to confirm reset. Will do nothing without this.")
+def reset_source_json(confirm):
+    """Resets the source json by deleting everything except for root"""
+    if confirm:
+        Sources().reset_to_defaults()
+        click.echo("Reset")
+    else:
+        click.echo("Not confirmed so no reset. Use --confirm to confirm")
 @cli.group
 def config():
     """View and edit the config"""
-    
+
 
 @config.command(name="list")
-# @click.option("--type")
-@click.option("--key", help="Specifc key to show config for (none by default)")
+@click.option("--key", help="Specific key to show config for (none by default)")
 def list_config(key):
     """Lists all settings with their current values"""
     cols = ["Name", "Value"]
-    config = Config()
+    cfg = Config()
     if key:
-        value = config.get_value_recursively(target_key=key, data=config.load())
-        row = [key, value]
-        display_table("List Config", cols, row)
+        if "." in key:
+            value = _run(cfg.get_value, key)
+        else:
+            value = cfg.get_value_recursively(target_key=key, data=cfg.get())
+            if value is None:
+                raise click.ClickException(f"Unknown setting: {key}")
+        display_table("List Config", cols, [[key, value]])
     else:
-        config_data = config.get()
-        for name, section in config_data.items():
-            rows = [[key, value] for key, value in section.items()]
+        for name, section in cfg.get().items():
+            rows = [[k, v] for k, v in section.items()]
             display_table(name, cols, rows)
 
 
 @config.command(name="open")
 def open_config():
-    """Opens the config json in a the default text editor"""
-    config = Config()
-    config.open_json_file()
+    """Opens the config json in the default text editor"""
+    Config().open_json_file()
+
 
 @config.command(name="set")
 @click.argument("setting")
 @click.argument("value")
 def set_value(setting, value):
-    """Update a given setting. Use . notation to specifiy section, eg anki.deckname"""
-    config = Config()
+    """Update a given setting. Use . notation to specify section, eg anki.deckname"""
+    cfg = Config()
     if "." in setting:
-        config.set_value(setting, value)
+        _run(cfg.get_value, setting)          # fails cleanly if the setting doesn't exist
+        cfg.set_value(setting, value)
     else:
-        # need to recursively search for the key
-        result_json = config.set_value_recursively(setting, value, config.load())
-        config.save(result_json)
+        data = copy.deepcopy(cfg.get())
+        if not cfg.set_value_recursively(setting, value, data):
+            raise click.ClickException(f"Unknown setting: {setting}")
+        cfg.save(data)
+    success_message(f"Set {setting}")
 
 
 @config.command(name="reset")
-def reset_to_default():
-    """Reset all settings to default values"""
-    # note to self: make the user confirm somehow
-    Config().reset_to_defaults()
-    print("Reset")
+@click.option("--confirm", is_flag=True, default=False, help="Add to confirm reset. Will do nothing without this.")
+def reset_to_default(confirm):
+    """Reset all settings to default values."""
+    if confirm:
+        Config().reset_to_defaults()
+        click.echo("Reset")
+    else:
+        click.echo("Not confirmed so no reset. Use --confirm to confirm")

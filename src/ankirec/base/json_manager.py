@@ -20,6 +20,11 @@ class JsonManager(ABC):
         super().__init__()
         self.file_path: Path = self.build_path(self.filename)
         self._cache: Optional[dict] = None
+
+        if not self.file_path.exists():
+            self.file_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.file_path.open("w", encoding="utf-8") as f:
+                json.dump(self.defaults, f, indent=2)
  
     # ---- What subclasses supply -------------------------------------------
  
@@ -143,11 +148,10 @@ class JsonManager(ABC):
         for key, value in data.items():
             if key == str(target_key):
                 data[key] = new_value
-                return data
-            if isinstance(value, dict):
-                if self.set_value_recursively(target_key=target_key, new_value=new_value, data=value):
-                    return data
-        raise KeyError(f"Could not find key {target_key} in config")
+                return True
+            if isinstance(value, dict) and self.set_value_recursively(target_key, new_value, value):
+                return True
+        return False
  
     def reset_to_defaults(self) -> None:
         """Reset everything to its default value."""

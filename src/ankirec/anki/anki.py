@@ -1,19 +1,46 @@
 import json
 import requests
 import socket
+import re
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import date
 from base64 import b64encode
-# from click import get_app_dir
-from typing import Optional
+from enum import Enum
+from click import get_app_dir
 
 from ..base.exceptions import AnkiConnectError
 from ..base.config import Config
 from ..base.mixin import VerboseMixin
-from ..base.constants import SCRIPT_DIR
+from ..base.constants import SCRIPT_DIR, APP_NAME
 from ..base.json_manager import JsonManager
 from ..sources.source_manager import Sources
+
+class FieldType(Enum):
+    IMAGE = ("image", "screenshot")
+    SENTENCE_AUDIO = ("sentenceaudio",)
+    WORD = ("word", "term")
+    WORD_AUDIO = ("wordaudio",)
+    DATE = ("date",)
+    SOURCE = ("source",)
+    STANDARD = ()
+
+    @classmethod
+    def from_name(cls, name: str) -> "FieldType":
+        def normalise(name: str) -> str:
+            return re.sub(r"[\s_-]", "", name).lower()
+
+        key = normalise(name)
+        for member in cls:
+            if key in member.value:
+                return member
+        return cls.STANDARD
+
+@dataclass
+class NoteField:
+    name: str
+    optional: bool
+    special_feature: FieldType
 
 @dataclass
 class AnkiConfig:
@@ -21,10 +48,12 @@ class AnkiConfig:
     auto_clear_folder: bool
     deckname: str
     cardmodel: str
-    cardmodel_fields: list[str]
+    cardmodel_fields: list[NoteField]
     anki_profile: str
     ankiconnect_port: int
     ankiconnect_api_ver: int
+
+
 
 
 class NotesJson(JsonManager):
@@ -44,8 +73,10 @@ class NotesJson(JsonManager):
 
 
 class SharedValues(VerboseMixin):
-    notes_json_file = SCRIPT_DIR / "anki" / "notes.json"
+    # notes_json_file = SCRIPT_DIR / "anki" / "notes.json"
     notes_json_filename = "notes"
+    notes_json_file = Path(get_app_dir(APP_NAME)) / f"{notes_json_filename}.json"
+    notes_json_file.parent.mkdir(parents=True, exist_ok=True)
     notes_json_manager = NotesJson()
     def __init__(self):
         super().__init__()
@@ -168,11 +199,6 @@ def is_port_open(port: int, host: str = 'localhost', timeout: float = 1.0) -> bo
     Returns:
         True if the port is open, False otherwise
     
-    Example:
-        >>> is_port_open(8080)
-        True
-        >>> is_port_open(9999)
-        False
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(timeout)
@@ -184,6 +210,7 @@ def is_port_open(port: int, host: str = 'localhost', timeout: float = 1.0) -> bo
         sock.close()
 
 
+
 class AnkiManager(SharedValues):
     def __init__(self, screenshot: Path, audio: Path):
         super().__init__()
@@ -193,16 +220,19 @@ class AnkiManager(SharedValues):
         self.actions = AnkiconnectActions(self.config.ankiconnect_port, self.config.ankiconnect_api_ver)
 
     def load_config(self) -> AnkiConfig:
+        """Loads the config json into the AnkiConfig object"""
         config = Config()
         anki_config = config.load_section("anki")
         if not anki_config.get("deckname") or not anki_config.get("cardmodel"):
             raise ValueError("Deckname and Cardmodel must be provided")
         
-        cardmodel_fields=anki_config.get("cardmodel_fields", [])
-        if not "Image" in cardmodel_fields:
-            raise ValueError("Your cardmodel must include a field called Image")
-        if not "SentenceAudio" in cardmodel_fields:
-            raise ValueError("Your cardmodel must include a field called SentenceAudio")
+        # cardmodel_fields=anki_config.get("cardmodel_fields", [])
+        # if not "Image" in cardmodel_fields:
+        #     raise ValueError("Your cardmodel must include a field called Image")
+        # if not "SentenceAudio" in cardmodel_fields:
+        #     raise ValueError("Your cardmodel must include a field called SentenceAudio")
+
+        cardmodel_fields = self._load_fields(anki_config.get("cardmodel_fields", []))
         
         return AnkiConfig(
             instant_send=anki_config.get("instant_send", False),
@@ -214,6 +244,35 @@ class AnkiManager(SharedValues):
             ankiconnect_port=anki_config.get("ankiconnect_port", 8765),
             ankiconnect_api_ver=anki_config.get("ankiconnect_api_ver", 6)
         )
+
+
+
+    def _load_fields(self, fields: list[str]) -> list[NoteField]:
+        """Takes the list of fields and categorises them based on function"""
+        note_fields = []
+        for entry in fields:
+            name, *flags = (part.strip() for part in entry.split(":"))
+
+            optional = False
+            field_type = None
+            for flag in flags:
+                if flag.lower() == "optional":
+                    optional = True
+                    continue
+                flag_type = FieldType.from_name(flag)
+                if flag_type is FieldType.STANDARD:
+                    raise ValueError(f"Unknown flag '{flag}' on field '{name}'")
+                if field_type is not None:
+                    raise ValueError(f"Field '{name}' has more than one type flag")
+                field_type = flag_type
+
+            if field_type is None:
+                field_type = FieldType.from_name(name)  # fall back to the name
+
+            note_fields.append(NoteField(name, optional=optional, special_feature=field_type))
+
+        return note_fields
+
 
 
     def move_media_to_anki(self):

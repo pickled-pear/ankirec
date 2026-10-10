@@ -4,6 +4,8 @@ from ..anki.anki import AnkiManager
 from ..base.context import verbose_mode
 from .fields_input_api.input_api import InputDialog, DialogCancelled, Field
 from ..sources.source_manager import Sources
+from ..audio.audioplayer import AudioPlayerController
+from ..base.config import Config
 
 import time
 import threading
@@ -19,6 +21,7 @@ class FlashcardManager(VerboseMixin):
         self.persistent_verbose = self.verbose
         self.dialog = InputDialog()
         self.retaken_screenshot = None
+        self.audio_controller = AudioPlayerController(volume=Config().load_section("general").get("sfx_volume", 0.5))
 
     def _start_abort_timer(self, recording_cycle: int, timeout_seconds: int) -> None:
         """
@@ -50,29 +53,18 @@ class FlashcardManager(VerboseMixin):
 
         else:
             screenshot, audio = self.combined_recorder.stop_recording()
+            self.audio_controller.play_sfx("stop_recording.mp3")
             
-            # CRITICAL: Give the system time to recover from COM object cleanup
+            # Give the system time to recover from COM object cleanup
             # This prevents UI lag when the dialog opens
+
+            # but try removing on windows later
             time.sleep(0.2)
-            
-            # On Windows, pump the message queue to ensure COM cleanup is complete
-            # try:
-            #     import sys
-            #     if sys.platform == "win32":
-            #         import ctypes
-            #         MSG = ctypes.c_char * 28
-            #         msg = MSG()
-            #         # Pump pending messages briefly
-            #         for _ in range(5):
-            #             ctypes.windll.user32.PeekMessageA(ctypes.byref(msg), 0, 0, 0, 1)
-            #             ctypes.windll.kernel32.Sleep(10)
-            # except Exception:
-            #     # Not critical if this fails
-            #     pass
             
             verbose_mode.set(self.persistent_verbose)
 
             ankimanager = AnkiManager(screenshot=screenshot, audio=audio)
+            
 
             fields = {}
             try:

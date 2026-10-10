@@ -27,25 +27,24 @@ DEFAULT_SETTINGS = {
     # CHECK FOR UNUSED SETTINGS ME
     "general": {
         "developer": False,
-        "logging_level": 1  # 1 - 5
-        # blah blah blah git jists
+        "logging_level": 1,  # 1 - 5
+        # blah blah blah git gists
+        "sfx_volume": 0.5,
     },
     "anki": {
         "instant_send": True,
         "auto_clear_folder": True,
-        # "decks": [
-        #     {"name": "Core::Mining::Central", "model": "MiningCard"},
-        # ],
-        "deckname": "Core::Mining::Central",
-        "cardmodel": "MiningCard",
-        "cardmodel_fields": ["Word", "Reading", "Definition", "Sentence", "Notes", "Image", "Date", "Source", "SentenceAudio", "WordAudio"],
-        "anki_profile":"Main",
+        "deckname": "",
+        "cardmodel": "",
+        # "cardmodel_fields": ["Image", "Date", "Source", "SentenceAudio", "WordAudio"],
+        "cardmodel_fields": ["Picture:image", "Clip:sentenceaudio", "Expression:word", "ExpressionAudio:wordaudio", "Meaning", "Notes:optional"],
+        "anki_profile":"User1",
         "ankiconnect_port":8765,
         "ankiconnect_api_ver": 6
     },
     "recording": {
         "record_screen": True,
-        "fps": 20,
+        "fps": 15,
         "max_duration": 30,
         "recording_volume_lufs": -23,
         "blocksize":4096,   #higher on slow computers

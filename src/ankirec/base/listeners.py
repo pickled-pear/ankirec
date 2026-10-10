@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from pynput import keyboard
 import threading
+import click
 
 from ..anki.flashcard import FlashcardManager
 from ..recording.full_recorder import FullRecorder
@@ -119,7 +120,7 @@ class RecordListener(KeyListener):
     def __init__(self,):
         super().__init__()
         self.flashcard = FlashcardManager()
-        self.info("Listening! Press altgr to start")
+        click.echo("Listening! Press altgr to start")
 
     def map_to_key(self, keyvk: int) -> keyboard.Key | None:
         """right alt is non-consistent across platforms so map it if does not work"""

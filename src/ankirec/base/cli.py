@@ -5,13 +5,15 @@ from rich.table import Table
 from rich.console import Console
 import sys
 import copy
+import json
 
 from .listeners import ListenerManager, RecordListener, AbortRecordListener
 from .constants import APP_NAME
 from .config import Config
 from .context import verbose_mode
 from ..anki.anki import AnkiconnectActions
-from ..sources.source_manager import Sources
+from ..sources.source_manager import Sources, Source
+from ..sources.source_tree import source_tree_rich
 
 
 def verify_location_safety():
@@ -68,6 +70,65 @@ def _run(action, *args, **kwargs):
     except ValueError as e:
         raise click.ClickException(str(e)) from None
 
+
+def _coerce(item):
+    """Convert a CLI string to bool/int/float where it clearly is one."""
+    if not isinstance(item, str):
+        return item
+    text = item.strip()
+
+    # Explicitly quoted -> always a string, eg '"123"'
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
+        return text[1:-1]
+
+    if text.lower() in ("true", "false"):
+        return text.lower() == "true"
+
+    try:
+        return int(text)
+    except ValueError:
+        pass
+
+    if any(ch.isdigit() for ch in text):   # stops "nan"/"inf" becoming floats
+        try:
+            return float(text)
+        except ValueError:
+            pass
+
+    return item
+
+
+def _parse_value(values):
+    """Turn the CLI args into a scalar or a list.
+
+    foo                    -> "foo"
+    true                   -> True
+    5                      -> 5
+    foo bar baz            -> ["foo", "bar", "baz"]
+    '["foo", "bar"]'       -> ["foo", "bar"]
+    [foo, bar]             -> ["foo", "bar"]   (quotes eaten by the shell)
+    """
+    joined = " ".join(values).strip()
+
+    if joined.startswith("[") and joined.endswith("]"):
+        try:
+            parsed = json.loads(joined)
+            if isinstance(parsed, list):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+        return [
+            _coerce(item)
+            for item in joined[1:-1].split(",")
+            if item.strip()
+        ]
+
+    if len(values) > 1:
+        return [_coerce(v) for v in values]
+    return _coerce(values[0])
+
+# --- general commands --------------------------------------------------------
+
 @click.group
 @click.version_option()
 def cli():
@@ -101,36 +162,40 @@ def sendnotes(verbose):
 
 
 
+ 
+# --- source group ------------------------------------------------------------
+
+ 
 @cli.group
 def source():
     """Manage the source options"""
-
-
+ 
+ 
 @source.command(name="list")
-@click.option("--folder", default="root", help="Folder to list. Root by default")
-@click.option("--recurse", is_flag=True, default=False, help="Also list everything in subfolders")
-def list_sources(folder: str, recurse: bool):
-    """Lists all sources in the given folder"""
+@click.option("--folder", default="root", help="Folder to show. Root by default")
+def list_sources(folder: str):
+    """Shows the source tree, with the active source marked"""
     sources = Sources()
-    items = _run(sources.list_items, folder, recurse=recurse)
-    if not items:
+    top = _run(sources.get_folder, folder)
+    if not top.children:
         click.echo(f"{folder} is empty")
         return
-    marker = sources.selected
-    cols = ["Name", "Type", "Selected"]
-    rows = []
-    for item in items:
-        path = item.full_path.removeprefix("root/")
-        rows.append([path if recurse else item.name, item.item_type.value, "*" if path == marker else ""])
-    display_table(folder, cols, rows)
-
-
+    Console().print(source_tree_rich(top, sources.selected_id))
+ 
+ 
+@source.command(name="current")
+def current_source():
+    """Shows the active source"""
+    selected = Sources().selected
+    click.echo(selected.path if selected else "No active source")
+ 
+ 
 @source.command(name="open")
 def open_config():
     """Opens the config json in the default text editor"""
     Sources().open_json_file()
-
-
+ 
+ 
 @source.command(name="add")
 @click.argument("name")
 @click.argument("folder")
@@ -139,42 +204,58 @@ def add_source(name: str, folder: str, item_type: str):
     """Adds a source or folder called NAME inside FOLDER"""
     _run(Sources().add_item, name, folder, item_type)
     success_message("Added!")
-
-
+ 
+ 
 @source.command(name="move")
 @click.argument("path")
 @click.argument("new_folder")
 def move_source(path: str, new_folder: str):
     """Moves the item at PATH into NEW_FOLDER"""
     item = _run(Sources().move_item, path, new_folder)
-    success_message(f"Moved to {item.full_path}")
-
-
+    success_message(f"Moved to {item.path}")
+ 
+ 
 @source.command(name="rename")
 @click.argument("path")
 @click.argument("new_name")
 def rename_source(path: str, new_name: str):
     """Renames the item at PATH to NEW_NAME"""
     item = _run(Sources().rename_item, path, new_name)
-    success_message(f"Renamed to {item.full_path}")
-
-
+    success_message(f"Renamed to {item.path}")
+ 
+ 
 @source.command(name="delete")
 @click.argument("path")
 def delete_object(path: str):
     """Deletes the item at PATH. Deleting a folder deletes all children"""
     item = _run(Sources().delete_item, path)
     success_message(f"Deleted {item.name}")
-
-
+ 
+ 
 @source.command(name="set")
-@click.argument("path")
-def set_source(path: str):
-    """Sets the active source"""
-    item = _run(Sources().select, path)
-    success_message(f"Active source set to {item.name}")
-
-
+@click.argument("path", required=False)
+def set_source(path: str | None):
+    """Sets the active source to PATH, or shows the tree to pick from if no PATH is given"""
+    sources = Sources()
+    if path is None:
+        options: list[Source] = []
+        tree = source_tree_rich(sources.get_folder(), sources.selected_id, numbered=options)
+        if not options:
+            raise click.ClickException("No sources yet. Add one with: source add NAME FOLDER source")
+        Console().print(tree)
+        choice = click.prompt("Source number", type=click.IntRange(1, len(options)))
+        path = options[choice - 1].full_path
+    item = _run(sources.select, path)
+    success_message(f"Active source set to {item.path}")
+ 
+ 
+@source.command(name="unset")
+def unset_source():
+    """Clears the active source"""
+    Sources().deselect()
+    success_message("No active source")
+ 
+ 
 @source.command(name="reset")
 @click.option("--confirm", is_flag=True, default=False, help="Add to confirm reset. Will do nothing without this.")
 def reset_source_json(confirm):
@@ -184,10 +265,16 @@ def reset_source_json(confirm):
         click.echo("Reset")
     else:
         click.echo("Not confirmed so no reset. Use --confirm to confirm")
+
+
+
+
+
+# --- config group -------------------------------------------------------------------------
+
 @cli.group
 def config():
     """View and edit the config"""
-
 
 @config.command(name="list")
 @click.option("--key", help="Specific key to show config for (none by default)")
@@ -217,9 +304,14 @@ def open_config():
 
 @config.command(name="set")
 @click.argument("setting")
-@click.argument("value")
-def set_value(setting, value):
-    """Update a given setting. Use . notation to specify section, eg anki.deckname"""
+@click.argument("values", nargs=-1, required=True)
+def set_value(setting, values):
+    """Update a given setting. Use . notation to specify section, eg anki.deckname
+
+    Give several values, or a [bracketed, list], to store a list.
+    """
+    value = _parse_value(values)
+
     cfg = Config()
     if "." in setting:
         _run(cfg.get_value, setting)          # fails cleanly if the setting doesn't exist

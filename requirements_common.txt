@@ -4,6 +4,7 @@ rich
 requests
 
 # pygame  # investigate smaller packages that can play audio
+miniaudio
 
 mss
 pillow

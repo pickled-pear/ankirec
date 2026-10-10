@@ -1,11 +1,13 @@
-from ..base.mixin import *
+from ..base.mixin import VerboseMixin
 # from ..base.constants import PLATFORM, SCRIPT_DIR
 from ..base.config import Config, RecordingConfig
 from .audio_recorder_factory import AudioRecorderFactory
 from .screen_recorder import ScreenshotTaker
+from ..base.constants import APP_NAME
 
 from pathlib import Path
 from datetime import datetime
+from click import get_app_dir
 import time
 
 
@@ -39,6 +41,8 @@ class FullRecorder(VerboseMixin):
         rec_config = config.load_section("recording")
         now = datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
+        media_output_dir = Path(get_app_dir(APP_NAME)) / "temp_storage"
+        media_output_dir.mkdir(parents=True, exist_ok=True)
         return RecordingConfig(
             fps=rec_config.get("fps", 10),
             max_duration=rec_config.get("max_duration", 30),
@@ -47,7 +51,7 @@ class FullRecorder(VerboseMixin):
             output_image_height_px=rec_config.get("output_image_height_px", 960),
             sample_rate=rec_config.get("sample_rate", 48000),
             bitrate=rec_config.get("bitrate_kbps", 48),
-            output_dir=Path(__file__).parent.parent / "temp_storage",
+            output_dir=media_output_dir,
             timestamp=timestamp,
             screenshot_time=rec_config.get("screenshot_time", 0.8),
             wipe_media_folder=rec_config.get("wipe_media_folder", True)

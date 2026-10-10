@@ -9,6 +9,11 @@ A more detailed description of your project. Explain:
 - Who it's for
 - Key features or capabilities
 
+- Records your screen and audio to automatically use in anki flashcards
+    - Intended for using in immersion-based langauge learning
+- Supports linux and windows
+
+
 ## Getting Started
 
 ### Prerequisites
@@ -16,6 +21,8 @@ A more detailed description of your project. Explain:
 - Python 3.10+
 - ffmpeg MUST be on path
     - run `ffmpeg -version` anywhere to check
+- Anki extension [ankiconnect](https://ankiweb.net/shared/info/2055492159)
+- You will need to set up git gists if you want to sync your sources json
 
 If you are on linux:
 - pulseaudio-utils 
@@ -26,31 +33,85 @@ sudo apt install pulseaudio-utils
 
 ### Installation
 
+I recommend using pipx to install the project
+
 ```bash
 # Clone the repository
 git clone https://github.com/pickled-pear/ankirec.git
 cd ankirec
 
 # Install project (choose your platform)
-pip install -e .[linux]
+pipx install -editable .[linux]
 
-pip install -e .[windows]
+pipx install -editable .[windows]
 
 # run
 ankirec --help
 ```
 
-Make sure you choose the correct platform. Linux is supported on debian systems.
+### Setup
+
+You should then configure the tool
+
+```bash
+ankirec config open
+
+# or
+
+ankirec config list
+
+```
+
+The important settings to change are:
+
+* deckname
+    * The name of the deck in anki you want to send notes to
+* cardmodel
+    * The card model in anki you want to use
+    * In anki, configure with Tools &rarr; Manage Note Types (ctrl+shift+n)
+* cardmodel_fields
+    * The fields of the card model you are using
+
+Note these are all case sensitive.
+
+`cardmodel_fields` is the list of fields in your card model. Each field name must match the name in Anki exactly (field names are case sensitive).
+
+To give a field special behaviour, add a flag after its name, separated by a colon:
+
+    "cardmodel_fields": ["Picture:image", "Clip:sentenceaudio", "Expression:word", "ExpressionAudio:wordaudio", "Meaning", "Notes:optional"]
+
+| Flag | Required | Effect |
+| :---: | :---: | :--- |
+| `image`, `screenshot` | Yes (for now) | Inserts the auto-taken screenshot |
+| `sentenceaudio` | Yes | Inserts the auto-recorded audio |
+| `word`, `term` | No | Indicates to auto-generate TTS from this field |
+| `wordaudio` | Yes (if `word` is used) | Holds auto-generated TTS |
+| `date` | No | Inserts today's date into the field |
+| `source` | No | Inserts the active source |
+
+Flags are not case sensitive, and spaces, underscores and hyphens are ignored, so `:wordaudio`, `:WordAudio` and `:word_audio` all work.
+
+If a field's name already matches one of the flags (for example a field called `Image` or `Word Audio`), the flag is applied automatically and you don't need to write it.
+
+Any field without a flag is not considered special, and you will be asked to fill it in when creating a card. To allow a field to be left blank, add `:optional` after it, e.g. `Notes:optional`.
+
 
 ## Usage
 
-### Basic Example
+```bash
+# initates the main listener setup
+ankirec record
 
-Show how to use your project with a simple example:
+# ctrl + c in terminal to stop
+```
 
 ```bash
-# Example command
-command --flag "argument"
+# changing the config
+ankirec config set [SETTING] [NEW]
+
+# eg
+ankirec config set deckname mydeck
+
 ```
 
 ### Configuration

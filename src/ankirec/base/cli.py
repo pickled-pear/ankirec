@@ -149,7 +149,14 @@ def record(verbose):
     listener_manager.keep_alive()
 
 
-@cli.command(name="send-notes")
+# --- notes group --------------------------------------------------------------
+
+@cli.group
+def notes():
+    """Manages saved notes"""
+
+
+@notes.command(name="send")
 @click.option("--verbose", is_flag=True, default=False, help="Verbose flag")
 def sendnotes(verbose):
     """Sends the contents of notes.json to anki"""
@@ -158,6 +165,13 @@ def sendnotes(verbose):
     ankiactions = AnkiconnectActions(port=ankiconfig.get("ankiconnect_port", 8765), api_ver=ankiconfig.get("ankiconnect_api_ver", 6))
     ankiactions.send_notes_to_anki()
     success_message("Sent notes")
+
+
+# @notes.command(name="open")
+# def open_notes_json():
+#     """Opens the notes json file for inspection"""
+#     verbose_mode.set(False)
+#     json_file = anki.SharedValues().notes_json_file
 
 
 
@@ -333,3 +347,12 @@ def reset_to_default(confirm):
         click.echo("Reset")
     else:
         click.echo("Not confirmed so no reset. Use --confirm to confirm")
+
+
+@config.command(name="update")
+def update_config_keys():
+    """Merges existing config file with any new default keys"""
+    current_config = Config()
+    config_json = current_config.load()
+    current_config.save(config_json)
+    success_message("Updated config to have new keys")

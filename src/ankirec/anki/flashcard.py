@@ -1,6 +1,6 @@
 from ..base.mixin import VerboseMixin
 from ..recording.full_recorder import FullRecorder
-from ..anki.anki import AnkiManager
+from ..anki.anki import AnkiManager, FieldType
 from ..base.context import verbose_mode
 from .fields_input_api.input_api import InputDialog, DialogCancelled, Field
 from ..sources.source_manager import Sources
@@ -43,6 +43,10 @@ class FlashcardManager(VerboseMixin):
         self.retaken_screenshot = new_screenshot
         return new_screenshot
 
+    @classmethod
+    def _create_tts(cls, word: str, voices: list[str]):
+        """Uses edgetts to create tts for the word"""
+
     def on_press(self):
         """The core listener callback. Decides whether the system is recording, and responds accordingly"""
         if not self.recording:
@@ -64,18 +68,14 @@ class FlashcardManager(VerboseMixin):
             verbose_mode.set(self.persistent_verbose)
 
             ankimanager = AnkiManager(screenshot=screenshot, audio=audio)
+            manual_fields = ankimanager.get_manual_fields()
+            display_fields = [Field(label=field.name, optional=field.optional) for field in manual_fields]
             
 
             fields = {}
             try:
                 fields = self.dialog.ask(
-                    fields=[
-                        Field("Word"),
-                        Field("Reading"),
-                        Field("Definition"),
-                        Field("Sentence", optional=True),
-                        Field("Notes", optional=True)
-                    ],
+                    fields=display_fields,
                     title="Add Note",
                     image_path=screenshot,
                     audio_path=audio,
@@ -101,9 +101,25 @@ class FlashcardManager(VerboseMixin):
             ankimanager.screenshot = ankimanager.screenshot.rename(ankimanager.screenshot.with_stem(f"{selected_source}_{ankimanager.screenshot.stem}"))
             ankimanager.audio = ankimanager.audio.rename(ankimanager.audio.with_stem(f"{selected_source}_{ankimanager.audio.stem}"))
 
+            # re-dict fields
+            fields = dict(fields)
+
+            # if there is a word field, create tts for it. 
+            # the tts voice is randomly chosen from the list
+            for field in manual_fields:
+                if field.field_type == FieldType.WORD:
+                    word_field = field
+                    word_tts_field = AnkiManager._find_field_name(ankimanager.card_fields, FieldType.WORD_AUDIO)
+                    break
+
+            if word_tts_field:
+                text = fields.get(word_field.name, "")
+                tts_file = ankimanager.create_tts(text=text)
+                if tts_file:
+                    fields[word_tts_field] = f"[sound:{tts_file.name}]"
 
             self.info("Moving media...")
-            ankimanager.move_media_to_anki()
+            ankimanager.move_media_to_anki(word_tts=tts_file)
 
             self.info("Adding note...")
             ankimanager.add_notes_to_json(fields=fields)

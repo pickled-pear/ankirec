@@ -5,6 +5,7 @@ requests
 
 # pygame  # investigate smaller packages that can play audio
 miniaudio
+edge-tts
 
 mss
 pillow

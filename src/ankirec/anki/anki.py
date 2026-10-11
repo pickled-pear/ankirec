@@ -4,7 +4,7 @@ import socket
 import re
 from pathlib import Path
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from base64 import b64encode
 from enum import Enum
 from click import get_app_dir
@@ -12,9 +12,10 @@ from click import get_app_dir
 from ..base.exceptions import AnkiConnectError
 from ..base.config import Config
 from ..base.mixin import VerboseMixin
-from ..base.constants import SCRIPT_DIR, APP_NAME
+from ..base.constants import APP_NAME
 from ..base.json_manager import JsonManager
 from ..sources.source_manager import Sources
+from .tts import TtsController
 
 class FieldType(Enum):
     IMAGE = ("image", "screenshot")
@@ -40,7 +41,7 @@ class FieldType(Enum):
 class NoteField:
     name: str
     optional: bool
-    special_feature: FieldType
+    field_type: FieldType
 
 @dataclass
 class AnkiConfig:
@@ -52,6 +53,7 @@ class AnkiConfig:
     anki_profile: str
     ankiconnect_port: int
     ankiconnect_api_ver: int
+    tts_voices: list[str]
 
 
 
@@ -217,6 +219,7 @@ class AnkiManager(SharedValues):
         self.screenshot = screenshot
         self.audio = audio
         self.config = self.load_config()
+        self.card_fields = self.config.cardmodel_fields # for ease of use
         self.actions = AnkiconnectActions(self.config.ankiconnect_port, self.config.ankiconnect_api_ver)
 
     def load_config(self) -> AnkiConfig:
@@ -242,7 +245,8 @@ class AnkiManager(SharedValues):
             cardmodel_fields=cardmodel_fields,
             anki_profile=anki_config.get("anki_profile", "User1"),
             ankiconnect_port=anki_config.get("ankiconnect_port", 8765),
-            ankiconnect_api_ver=anki_config.get("ankiconnect_api_ver", 6)
+            ankiconnect_api_ver=anki_config.get("ankiconnect_api_ver", 6),
+            tts_voices=anki_config.get("tts_voices", [])
         )
 
 
@@ -269,13 +273,27 @@ class AnkiManager(SharedValues):
             if field_type is None:
                 field_type = FieldType.from_name(name)  # fall back to the name
 
-            note_fields.append(NoteField(name, optional=optional, special_feature=field_type))
+            note_fields.append(NoteField(name, optional=optional, field_type=field_type))
 
         return note_fields
 
 
+    def get_manual_fields(self, manual: bool=True) -> list[NoteField]:
+        """Returns a list of all fields requiring manual input by default. Gets all non-manual is specified"""
+        manual_field_types = {FieldType.STANDARD, FieldType.WORD}
+        if manual:
+            return [field for field in self.card_fields if field.field_type in manual_field_types]
+        else:
+            return [field for field in self.card_fields if field.field_type not in manual_field_types]
 
-    def move_media_to_anki(self):
+    def check_field_type_exists(self, field_type: FieldType) -> bool:
+        """Checks the specified field type exists in the given field list"""
+        special_fields = self.get_manual_fields(manual=False)
+        special_field_types = [value.field_type for value in special_fields]
+        return field_type in special_field_types
+
+
+    def move_media_to_anki(self, word_tts: Path = None):
         """Moves both the screenshot and audio file to anki (if they exist)"""
         if self.screenshot:
             result = self.actions.move_file_to_ank_media(self.screenshot.name, self.screenshot)
@@ -288,7 +306,36 @@ class AnkiManager(SharedValues):
             if not result.get("error"):
                 self.debug("Audio moved")
 
-    
+        if word_tts:
+            result = self.actions.move_file_to_ank_media(word_tts.name, word_tts)
+            if not result.get("error"):
+                self.debug("Word TTS move")
+
+    @classmethod
+    def _find_field_name(cls, fields: list[NoteField],  field_type: FieldType) -> str:
+        """Returns the name of the field of the desired field type, or an empty string if it is not found"""
+        for field in fields:
+            if field.field_type == field_type:
+                return field.name
+        return ""
+
+    def create_tts(self, text: str) -> Path:
+        voices = self.config.tts_voices
+        if voices:
+            # steal the filename from self.audio, since that should exist
+            # if not use the date today
+            if self.audio:
+                partial_filename = self.audio.stem
+            else:
+                partial_filename = datetime.now().strftime("%Y%m%d_%H:%M:%S")
+
+            filename = f"{partial_filename}_tts"
+            tts = TtsController(voices=voices)
+            self.debug("Creating TTS")
+            tts_file = tts.create_tts(text=text, filename=filename)
+            self.debug("Saved tts")
+            return tts_file
+
 
     def add_notes_to_json(
         self,
@@ -297,22 +344,41 @@ class AnkiManager(SharedValues):
     ):
         """Adds the given data as a note to notes.json. Sends them to anki if setting enabled"""
 
+        def _set_field(note_fields: dict, field_type: FieldType, value: str) -> None:
+            """Sets the given speical field type to the given value. Does nothing if field not found"""
+            field_name = self._find_field_name(self.card_fields, field_type)
+            if field_name:
+                note_fields[field_name] = value
+
         self.config = self.load_config() # reloads the config in case there were any changes
         source = Sources.get_selected_source_name()
+        note_fields = {}
 
         # Media fields, only included if the media actually exists
-        note_fields = {}
-        if self.screenshot.name:
-            note_fields["Image"] = f'<img src="{self.screenshot.name}">'
+        # if self.screenshot.name:
+        #     note_fields["Image"] = f'<img src="{self.screenshot.name}">'
+        # if self.audio.name:
+        #     note_fields["SentenceAudio"] = f"[sound:{self.audio.name}]"
+
+
+        # attempt to set special fields with special values if they exist
         if self.audio.name:
-            note_fields["SentenceAudio"] = f"[sound:{self.audio.name}]"
+            _set_field(note_fields, FieldType.SENTENCE_AUDIO, f"[sound:{self.audio.name}]")
+
+        if self.screenshot.name:
+            _set_field(note_fields, FieldType.IMAGE, f'<img src="{self.screenshot.name}">')
+
+        _set_field(note_fields, FieldType.DATE, date.today().isoformat())
+        _set_field(note_fields, FieldType.SOURCE, source)
+
+        # need some way to get the word field's name and tts for it
 
         # Caller-supplied fields: dict first, then keyword args on top
         note_fields.update(fields or {})
         note_fields.update(kwargs)
 
-        note_fields["Date"] = date.today().isoformat()
-        note_fields["Source"] = source
+        # note_fields["Date"] = date.today().isoformat()
+        # note_fields["Source"] = source
 
         tags = ["ankirec", source]
         tags = [tag for tag in tags if tag] # removes empty tags

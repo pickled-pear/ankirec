@@ -40,7 +40,8 @@ DEFAULT_SETTINGS = {
         "cardmodel_fields": ["Picture:image", "Clip:sentenceaudio", "Expression:word", "ExpressionAudio:wordaudio", "Meaning", "Notes:optional"],
         "anki_profile":"User1",
         "ankiconnect_port":8765,
-        "ankiconnect_api_ver": 6
+        "ankiconnect_api_ver": 6,
+        "tts_voices": []
     },
     "recording": {
         "record_screen": True,

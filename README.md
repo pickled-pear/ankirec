@@ -80,14 +80,15 @@ To give a field special behaviour, add a flag after its name, separated by a col
 
     "cardmodel_fields": ["Picture:image", "Clip:sentenceaudio", "Expression:word", "ExpressionAudio:wordaudio", "Meaning", "Notes:optional"]
 
-| Flag | Required | Effect |
-| :---: | :---: | :--- |
-| `image`, `screenshot` | Yes (for now) | Inserts the auto-taken screenshot |
-| `sentenceaudio` | Yes | Inserts the auto-recorded audio |
-| `word`, `term` | No | Indicates to auto-generate TTS from this field |
-| `wordaudio` | Yes (if `word` is used) | Holds auto-generated TTS |
-| `date` | No | Inserts today's date into the field |
-| `source` | No | Inserts the active source |
+| Flag | Required | Unique | Effect |
+| :---: | :---: | :---: | :--- |
+| `image`, `screenshot` | Yes (for now) | Yes | Inserts the auto-taken screenshot |
+| `sentenceaudio` | Yes | Yes | Inserts the auto-recorded audio |
+| `word`, `term` | No | Yes |Indicates to auto-generate TTS from this field |
+| `wordaudio` | Yes (if `word` is used)  | Yes | Holds auto-generated TTS |
+| `date` | No | Yes | Inserts today's date into the field |
+| `source` | No | Yes | Inserts the active source |
+| `optional` | No | No | Marks a manual field as optional |
 
 Flags are not case sensitive, and spaces, underscores and hyphens are ignored, so `:wordaudio`, `:WordAudio` and `:word_audio` all work.
 

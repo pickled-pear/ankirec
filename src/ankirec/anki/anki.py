@@ -98,41 +98,44 @@ class AnkiconnectActions(SharedValues):
         # self._moved_media_filename = None
 
     def _invoke(self, action, **params):
-        """Sends an action request to AnkiConnect and returns the result.
-        
-        Args:
-            action: The AnkiConnect action name (e.g., 'deckNames', 'addNote')
-            **params: Additional parameters for the action
+        if is_port_open(self.port):
+            """Sends an action request to AnkiConnect and returns the result.
             
-        Returns:
-            The result from AnkiConnect
+            Args:
+                action: The AnkiConnect action name (e.g., 'deckNames', 'addNote')
+                **params: Additional parameters for the action
+                
+            Returns:
+                The result from AnkiConnect
+                
+            Raises:
+                AnkiConnectError: If the API returns an error or connection fails
+            """
+            payload = {
+                "action": action,
+                "version": self.API_VERSION,
+                "params": params
+            }
             
-        Raises:
-            AnkiConnectError: If the API returns an error or connection fails
-        """
-        payload = {
-            "action": action,
-            "version": self.API_VERSION,
-            "params": params
-        }
-        
-        try:
-            response = requests.post(self.ANKI_CONNECT_URL, json=payload, timeout=10)
-            response.raise_for_status()
-            result = response.json()
-        except requests.exceptions.ConnectionError as e:
-            raise AnkiConnectError(f"Failed to connect to AnkiConnect: {e}")
-        except requests.exceptions.Timeout:
-            raise AnkiConnectError("AnkiConnect request timed out")
-        except requests.exceptions.HTTPError as e:
-            raise AnkiConnectError(f"HTTP error: {e.response.status_code}")
-        except json.JSONDecodeError as e:
-            raise AnkiConnectError(f"Invalid JSON response: {e}")
-        
-        if result.get("error"):
-            raise AnkiConnectError(f"AnkiConnect error: {result['error']}")
-        
-        return result
+            try:
+                response = requests.post(self.ANKI_CONNECT_URL, json=payload, timeout=10)
+                response.raise_for_status()
+                result = response.json()
+            except requests.exceptions.ConnectionError as e:
+                raise AnkiConnectError(f"Failed to connect to AnkiConnect: {e}")
+            except requests.exceptions.Timeout:
+                raise AnkiConnectError("AnkiConnect request timed out")
+            except requests.exceptions.HTTPError as e:
+                raise AnkiConnectError(f"HTTP error: {e.response.status_code}")
+            except json.JSONDecodeError as e:
+                raise AnkiConnectError(f"Invalid JSON response: {e}")
+            
+            if result.get("error"):
+                raise AnkiConnectError(f"AnkiConnect error: {result['error']}")
+            
+            return result
+        else:
+            self.warning("Anki port not detected. Nothing done")
 
     def send_notes_to_anki(self) -> None:
         """Adds the contents of notes.json to anki itself"""
@@ -327,7 +330,7 @@ class AnkiManager(SharedValues):
             if self.audio:
                 partial_filename = self.audio.stem
             else:
-                partial_filename = datetime.now().strftime("%Y%m%d_%H:%M:%S")
+                partial_filename = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             filename = f"{partial_filename}_tts"
             tts = TtsController(voices=voices)

@@ -12,6 +12,7 @@ class TtsController:
         if not voices:
             raise ValueError("At least one voice is required")
         self.voices = voices
+        
 
     def create_tts(self, text: str, filename: str) -> Path:
         """Creates tts for the text using a random voice.
@@ -44,3 +45,5 @@ class TtsController:
             check=True,
         )
         return opus_path
+
+

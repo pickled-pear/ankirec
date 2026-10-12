@@ -41,7 +41,7 @@ DEFAULT_SETTINGS = {
         "anki_profile":"User1",
         "ankiconnect_port":8765,
         "ankiconnect_api_ver": 6,
-        "tts_voices": []
+        "tts_voices": [],
     },
     "recording": {
         "record_screen": True,

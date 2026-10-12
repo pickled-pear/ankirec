@@ -98,8 +98,9 @@ class FlashcardManager(VerboseMixin):
 
             # renames the media before moving
             selected_source = Sources.get_selected_source_name()
-            ankimanager.screenshot = ankimanager.screenshot.rename(ankimanager.screenshot.with_stem(f"{selected_source}_{ankimanager.screenshot.stem}"))
-            ankimanager.audio = ankimanager.audio.rename(ankimanager.audio.with_stem(f"{selected_source}_{ankimanager.audio.stem}"))
+            normalised_source = Sources.normalise_source_name(selected_source)
+            ankimanager.screenshot = ankimanager.screenshot.rename(ankimanager.screenshot.with_stem(f"{normalised_source}_{ankimanager.screenshot.stem}"))
+            ankimanager.audio = ankimanager.audio.rename(ankimanager.audio.with_stem(f"{normalised_source}_{ankimanager.audio.stem}"))
 
             # re-dict fields
             fields = dict(fields)

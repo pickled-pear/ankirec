@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 import copy
+import re
 
 from ..base.json_manager import JsonManager
 from .source_tree import Folder, Source, TreeItem, ItemTypes, create_item_factory
@@ -237,3 +238,8 @@ class Sources(JsonManager):
     @staticmethod
     def _has_root(tree) -> bool:
         return isinstance(tree, dict) and tree.get("name") == "root"
+
+    @staticmethod
+    def normalise_source_name(source: str) -> str:
+        """Runs some normalisation on the source name to standardise it."""
+        return re.sub(r"[.,;\s\"'=~@<>\[\]{}()-]+", "_", source).lower().strip("_")

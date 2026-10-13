@@ -4,6 +4,7 @@ from pathlib import Path
 import miniaudio
 import array
 
+from ..base.universal import singleton
 
 class Player:
     def __init__(self, volume: float = 1.0):
@@ -43,7 +44,7 @@ class Player:
             time.sleep(0.2)  # let the final buffer drain
         self._device.close()
 
-
+@singleton
 class AudioPlayerController:
     def __init__(self, volume: float = 0.8):
         self.sfx_dir = Path(__file__).parent / "sfx"

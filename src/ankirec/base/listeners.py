@@ -154,10 +154,12 @@ class AbortRecordListener(KeyListener):
     """Class that listens to abort recording"""
     target_keys = set([keyboard.KeyCode.from_char("q")])
     recorder: FullRecorder
+    is_recording: bool
 
     def __init__(self):
         super().__init__()
         self.recorder = FullRecorder()
+        
 
     def on_press(self, key):
         # Check if shutdown was requested
@@ -166,14 +168,13 @@ class AbortRecordListener(KeyListener):
         
         # Only abort while actually recording, so typing "q" elsewhere
         # (e.g. in the fields window) does not wipe the media folder.
-        if key in self.target_keys and self.recorder.recording:
+        if key in self.target_keys:
             self.run_in_background(self._abort)
 
         return None
 
     def _abort(self) -> None:
         self.recorder.abort()
-        self.debug(self.recorder.recording_cycle)
 
 
 class Parrot(KeyListener):

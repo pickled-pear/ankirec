@@ -10,10 +10,18 @@ import gc
 from pathlib import Path
 from typing import Optional
 
-import pythoncom
-import soundcard as sc
-import soundfile as sf
-import numpy as np
+try: 
+    import pythoncom
+    import soundcard as sc
+    import soundfile as sf
+    import numpy as np
+except ImportError as e:
+    raise ImportError(
+        f"""Missing Windows dependency '{e.name}'. Reinstall with:\n
+          pipx uninstall ankirec
+          pipx install --force "ankirec[windows]\"
+          """
+    ) from e
 
 from .audio_recorder import AbstractAudioRecorder, AudioConfigProtocol
 

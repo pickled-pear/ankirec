@@ -68,7 +68,6 @@ ankirec config open
 ankirec config list
 ```
 
-```
 
 The important settings to change are:
 

@@ -4,7 +4,7 @@ from pathlib import Path
 import miniaudio
 import array
 
-from ..base.universal import singleton
+from ..base.helpers import singleton
 
 class Player:
     def __init__(self, volume: float = 1.0):

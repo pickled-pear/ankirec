@@ -37,9 +37,8 @@ class VerboseMixin:
 
     def info(self, *args):
         """Log at info level"""
-        if self.verbose:
-            message = ' '.join(str(arg) for arg in args)
-            self.logger.info(message)
+        message = ' '.join(str(arg) for arg in args)
+        self.logger.info(message)
 
     def warning(self, *args):
         """Log at warning level"""

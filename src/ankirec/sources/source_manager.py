@@ -9,7 +9,8 @@ import re
 
 from ..base.json_manager import JsonManager
 from .source_tree import Folder, Source, TreeItem, ItemTypes, create_item_factory
-
+# from ..base.firebase_sync import FirebaseStore # used for syncing
+# from ..fields_input_api.input_api import ask_input
 
 
 class Sources(JsonManager):

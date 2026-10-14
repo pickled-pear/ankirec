@@ -1,9 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ankirec"
-version = "1.1.2"
+version = "1.2.0"
 readme = "README.md"
-description = "foo bar"
-dependencies = ["click", "pynput", "rich", "requests", "mss", "pillow", "miniaudio", "edge-tts"]
+description = "A tool for helping create your own anki flashcards, with screen and sound recording."
+dependencies = ["click", "pynput", "rich", "requests", "mss", "pillow", "miniaudio", "edge-tts>=7.3.1"]
 
 [project.optional-dependencies]
 windows = ["soundcard", "soundfile", "pywin32"]
@@ -12,9 +16,8 @@ linux = []
 [project.scripts]
 ankirec = "ankirec.__main__:cli"
 
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+[tool.setuptools.packages.find]
+where = ["src"]
 
-[tool.setuptools]
-package-dir = {"" = "src"}
+[tool.setuptools.package-data]
+ankirec = ["sfx/**/*"]

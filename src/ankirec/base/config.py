@@ -1,5 +1,5 @@
 from .json_manager import JsonManager
-from .universal import singleton
+from .helpers import singleton
 from .constants import DEFAULT_SETTINGS
 from typing import Optional
 from pathlib import Path

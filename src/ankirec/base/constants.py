@@ -28,8 +28,9 @@ DEFAULT_SETTINGS = {
     "general": {
         "developer": False,
         "logging_level": 1,  # 1 - 5
-        # blah blah blah git gists
         "sfx_volume": 0.5,
+        # blah blah blah git gists
+        "sources_sync": False
     },
     "anki": {
         "instant_send": True,

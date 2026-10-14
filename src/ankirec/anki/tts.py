@@ -2,6 +2,8 @@ import random
 import subprocess
 from pathlib import Path
 import aiohttp
+import asyncio
+import time
 from rich import print
 
 from click import get_app_dir
@@ -16,26 +18,34 @@ class TtsController:
         self.voices = voices
         
 
-    def create_tts(self, text: str, filename: str) -> Path:
-        """Creates tts for the text using a random voice.
 
-        Saves to same place recording files go to and returns the opus path.
-        """
+    def create_tts(self, text: str, filename: str) -> Path:
         import edge_tts
-        voice = random.choice(self.voices)
+        """Creates TTS for the text using a random voice and returns the opus path."""
+        # print(edge_tts.__version__)
         out_dir = Path(get_app_dir(APP_NAME)) / "temp_storage"
         out_dir.mkdir(parents=True, exist_ok=True)
-
         mp3_path = out_dir / f"{filename}.mp3"
-        try:
-            edge_tts.Communicate(text, voice).save_sync(str(mp3_path))
-        except aiohttp.WSServerHandshakeError as e:
-            if e.status == 403:
-                print("[red]Edge TTS rejected the request (403). Try upgrading edge-tts or checking the system clock.\nOr reinstall the tool.")
-            raise
+
+        attempts = 4
+        for attempt in range(1, attempts + 1):
+            voice = random.choice(self.voices)
+            try:
+                asyncio.run(edge_tts.Communicate(text, voice).save(str(mp3_path)))
+                break
+            except aiohttp.WSServerHandshakeError as e:
+                if e.status != 403 or attempt == attempts:
+                    if e.status == 403:
+                        print("[red]Edge TTS kept rejecting the request (403). "
+                            "Try upgrading edge-tts or checking the system clock.")
+                    raise
+                wait = 2 ** attempt + random.uniform(0, 1)  # ~2 s, 4 s, 8 s
+                print(f"[yellow]Edge TTS returned 403, retrying in {wait:.1f} s "
+                    f"(attempt {attempt}/{attempts})")
+                time.sleep(wait)
 
         opus_path = self._convert_to_opus(mp3_path)
-        mp3_path.unlink()
+        mp3_path.unlink(missing_ok=True)
         return opus_path
 
     @staticmethod

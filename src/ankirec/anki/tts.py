@@ -1,6 +1,8 @@
 import random
 import subprocess
 from pathlib import Path
+import aiohttp
+from rich import print
 
 from click import get_app_dir
 
@@ -25,7 +27,12 @@ class TtsController:
         out_dir.mkdir(parents=True, exist_ok=True)
 
         mp3_path = out_dir / f"{filename}.mp3"
-        edge_tts.Communicate(text, voice).save_sync(str(mp3_path))
+        try:
+            edge_tts.Communicate(text, voice).save_sync(str(mp3_path))
+        except aiohttp.WSServerHandshakeError as e:
+            if e.status == 403:
+                print("[red]Edge TTS rejected the request (403). Try upgrading edge-tts or checking the system clock.\nOr reinstall the tool.")
+            raise
 
         opus_path = self._convert_to_opus(mp3_path)
         mp3_path.unlink()

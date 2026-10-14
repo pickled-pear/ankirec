@@ -59,6 +59,8 @@ class FlashcardManager(VerboseMixin):
             self._start_abort_timer(recording_cycle=current_cycle, timeout_seconds=30)
             return
 
+        # stopping
+        
         screenshot, audio = self.combined_recorder.stop_recording()
         if screenshot is None or audio is None:
             # An abort (key or timeout) got there first, or a recorder failed
@@ -66,7 +68,6 @@ class FlashcardManager(VerboseMixin):
             return
 
         self.audio_controller.play_sfx("stop_recording.mp3")
-
         # Give the system time to recover from COM object cleanup
         # This prevents UI lag when the dialog opens
 

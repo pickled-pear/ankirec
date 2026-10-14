@@ -334,7 +334,7 @@ class AnkiManager(SharedValues):
 
             filename = f"{partial_filename}_tts"
             tts = TtsController(voices=voices)
-            self.debug("Creating TTS")
+            self.debug(f"Creating TTS on text {text}")
             tts_file = tts.create_tts(text=text, filename=filename)
             self.debug("Saved tts")
             return tts_file

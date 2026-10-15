@@ -16,7 +16,7 @@ from pathlib import Path
  
 import requests
  
-API_KEY = "AIzaSyD7UyDDxMxVc0UOrChRXQmKUATAu1s1Y9A" # this is not secret
+API_KEY = "" # this is not secret
 DB_URL = "https://ankirec-58465-default-rtdb.europe-west1.firebasedatabase.app"
 APP_NAME = "ankirec"
 MAX_CHARS = 200_000  # must match the ".validate" rule
@@ -63,6 +63,21 @@ class FirebaseStore:
     @property
     def signed_in(self) -> bool:
         return self.refresh_token is not None
+
+    @property
+    def email(self) -> str | None:
+        """Return the email address of the signed-in user."""
+        if not self.signed_in:
+            return None
+
+        d = _check(self.s.post(
+            f"{AUTH_URL}:lookup",
+            params={"key": API_KEY},
+            json={"idToken": self._token()},
+            timeout=10
+        ))
+
+        return d["users"][0].get("email")
  
     def sign_up(self, email: str, password: str) -> None:
         """Create an account and send the verification email."""

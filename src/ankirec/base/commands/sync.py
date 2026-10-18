@@ -114,3 +114,12 @@ def firebase_pull(confirm):
 
     else:
         click.echo("Not confirmed so no changes. Use --confirm to confirm")
+
+@sync.command(name="status")
+def status_check():
+    """Check if you are signed in"""
+    store = FirebaseStore()
+    if store.signed_in:
+        click.echo(f"Signed in as {store.email}")
+    else:
+        click.echo(f"Not signed in. Use ankirec source sync login to sign in.")

@@ -37,7 +37,7 @@ def open_config():
     Config().open_json_file()
 
 
-@config.command(name="set")
+@config.command(name="set", context_settings={"ignore_unknown_options": True})
 @click.argument("setting")
 @click.argument("values", nargs=-1, required=True)
 def set_value(setting, values):

@@ -45,6 +45,8 @@ class FlashcardManager(VerboseMixin):
         """Retakes the image and returns the new one"""
         self.info("Retaking in 1s")
         time.sleep(1)
+        self.audio_controller.play_sfx("camera_shutter.mp3")
+        print("Note to self: fix this so that the image updates properly")
         new_screenshot = self.combined_recorder.screen_recorder.take_screenshot()
         self.retaken_screenshot = new_screenshot
         return new_screenshot
@@ -99,7 +101,7 @@ class FlashcardManager(VerboseMixin):
             self.info("Window closed, aborting...")
             return
 
-        if self.retaken_screenshot:
+        if self.retaken_screenshot is not None:
             ankimanager.screenshot = self.retaken_screenshot
             self.retaken_screenshot = None
 

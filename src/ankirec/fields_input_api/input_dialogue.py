@@ -312,9 +312,46 @@ def _run(fields: list[dict], title: str,
 
     def _select_all(text_widget):
         def _handler(e=None):
-            text_widget.tag_add("sel", "1.0", "end")
-            text_widget.mark_set("insert", "end")
+            text_widget.tag_remove("sel", "1.0", "end")
+            text_widget.tag_add("sel", "1.0", "end-1c")
+            text_widget.mark_set("insert", "end-1c")
+            text_widget.see("insert")
             return "break"
+        return _handler
+
+    def _delete_selection(text_widget) -> bool:
+        """Delete the selected text, if any. Returns True if something was deleted."""
+        try:
+            ranges = text_widget.tag_ranges("sel")
+            if ranges:
+                start, end = ranges[0], ranges[-1]
+                text_widget.delete(start, end)
+                text_widget.mark_set("insert", start)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _replace_selection_on_type(text_widget):
+        """Typing a printable character while text is selected replaces the selection."""
+        def _handler(e):
+            ch = e.char
+            # Ctrl+<key> yields a non-printable char, so it's skipped automatically.
+            # On macOS, Command+<key> still yields a printable char, so skip that too.
+            if IS_MAC and (e.state & 0x0008):
+                return None
+            if ch and ch.isprintable():
+                _delete_selection(text_widget)
+            # Let Tk's default class binding insert the character
+            return None
+        return _handler
+
+    def _replace_selection_on_paste(text_widget, resizer):
+        """Pasting while text is selected replaces the selection (X11 doesn't by default)."""
+        def _handler(e=None):
+            _delete_selection(text_widget)
+            top.after(10, resizer)
+            return None
         return _handler
 
     def _make_auto_resize(text_widget, wrap_frame, win):
@@ -412,12 +449,14 @@ def _run(fields: list[dict], title: str,
                   lambda e, w=wrap, t=text: (w.config(bg=BORDER), t.config(bg=BG2)))
 
         text.bind("<Control-a>", _select_all(text))
+        text.bind("<Control-A>", _select_all(text))  # Caps Lock on
         text.bind("<Return>",         lambda e: None)
         text.bind("<Control-Return>", lambda e: (_submit(), "break")[1])
 
         _resizer = _make_auto_resize(text, wrap, top)
+        text.bind("<Key>",        _replace_selection_on_type(text))
         text.bind("<KeyRelease>", _resizer)
-        text.bind("<<Paste>>",    lambda e, r=_resizer: top.after(10, r))
+        text.bind("<<Paste>>",    _replace_selection_on_paste(text, _resizer))
 
         err = tk.Label(body, text="", bg=BG, fg=BORDER_ERR,
                        font=("Consolas", 8), anchor="w")
@@ -456,7 +495,8 @@ def _run(fields: list[dict], title: str,
             aud_btn = _make_media_btn(media_row, "▶  Play Audio")
             aud_btn.pack(side="left")
             aud_str = f"[sound:{os.path.basename(audio_path)}]"
-            aud_btn.bind("<Button-1>", lambda e, p=audio_path, s=aud_str: (_open_file(p), copy_text_to_clipboard(s)))
+            # aud_btn.bind("<Button-1>", lambda e, p=audio_path, s=aud_str: (_open_file(p), copy_text_to_clipboard(s)))
+            aud_btn.bind("<Button-1>", lambda e, p=audio_path: _open_file(p))
 
     # ── Submit ────────────────────────────────────────────────────────────────
     def _submit(e=None):
@@ -526,7 +566,8 @@ def _run(fields: list[dict], title: str,
     # Unbind all events to break circular references
     for text in text_widgets:
         for seq in ("<Tab>", "<Shift-Tab>", "<FocusIn>", "<FocusOut>", "<Control-a>",
-                    "<Return>", "<Control-Return>", "<KeyRelease>", "<<Paste>>"):
+                    "<Control-A>", "<Return>", "<Control-Return>", "<Key>",
+                    "<KeyRelease>", "<<Paste>>"):
             _safe_unbind(text, seq)
 
     for widget in (close_btn, title_lbl, titlebar):

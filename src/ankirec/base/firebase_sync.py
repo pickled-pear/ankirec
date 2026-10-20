@@ -16,7 +16,7 @@ from pathlib import Path
  
 import requests
  
-API_KEY = "" # this is not secret
+API_KEY = "AIzaSyD7UyDDxMxVc0UOrChRXQmKUATAu1s1Y9A" # this is not secret
 DB_URL = "https://ankirec-58465-default-rtdb.europe-west1.firebasedatabase.app"
 APP_NAME = "ankirec"
 MAX_CHARS = 200_000  # must match the ".validate" rule

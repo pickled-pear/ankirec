@@ -63,7 +63,7 @@ class LinuxAudioRecorder(AbstractAudioRecorder):
 
         except FileNotFoundError:
             self.audio_file = None
-            raise RuntimeError("ffmpeg not found. Install: sudo apt install ffmpeg")
+            raise RuntimeError("Something went wrong. Possibly ffmpeg not found. Install: sudo apt install ffmpeg")
         except Exception as e:
             self.error(f"Recording loop error: {e}")
         finally:

@@ -87,7 +87,7 @@ class AbstractAudioRecorder(ABC, VerboseMixin):
 
         except FileNotFoundError:
             raise FileNotFoundError(
-                "ffmpeg not found. Install with:\n"
+                "Something went wrong in compression, potentially ffmpeg not found. Install with:\n"
                 "  Windows: choco install ffmpeg\n"
                 "  Linux: sudo apt install ffmpeg"
             )

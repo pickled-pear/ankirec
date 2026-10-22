@@ -48,8 +48,9 @@ class FlashcardManager(VerboseMixin):
         self.audio_controller.play_sfx("camera_shutter.mp3")
         print("Note to self: fix this so that the image updates properly")
         new_screenshot = self.combined_recorder.screen_recorder.take_screenshot()
-        self.retaken_screenshot = new_screenshot
-        return new_screenshot
+        new_path = new_screenshot.filepath
+        self.retaken_screenshot = new_path
+        return new_path
 
 
     def on_press(self):

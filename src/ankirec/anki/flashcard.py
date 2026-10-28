@@ -26,6 +26,9 @@ class FlashcardManager(VerboseMixin):
         self.dialog = InputDialog()
         self.retaken_screenshot = None
 
+        # perists to improve performance
+        self.anki_media_dir: Path | None = None 
+
 
     def _start_abort_timer(self, recording_cycle: int, timeout_seconds: int) -> None:
         """
@@ -126,12 +129,17 @@ class FlashcardManager(VerboseMixin):
 
         if word_tts_field:
             text = fields.get(word_field.name, "")
-            tts_file = ankimanager.create_tts(text=text)
+            mp3_file, tts_file = ankimanager.create_tts(text=text)
             if tts_file:
                 fields[word_tts_field] = f"[sound:{tts_file.name}]"
+                # play the tts 
+                self.audio_controller.play_audio(mp3_file)
 
         self.info("Moving media...")
-        ankimanager.move_media_to_anki(word_tts=tts_file)
+        ankimanager.move_media_to_anki(word_tts=tts_file, media_dir=self.anki_media_dir)
+
+        # grabs the anki media dir for later
+        self.anki_media_dir = ankimanager.actions.anki_media_dir
 
         self.info("Adding note...")
         ankimanager.add_notes_to_json(fields=fields)

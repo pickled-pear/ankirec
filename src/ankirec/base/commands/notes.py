@@ -21,6 +21,7 @@ def sendnotes(verbose):
         port=ankiconfig.get("ankiconnect_port", 8765),
         api_ver=ankiconfig.get("ankiconnect_api_ver", 6),
     )
+    ankiactions.update_anki_open()
     ankiactions.send_notes_to_anki()
     success_message("Sent notes")
 

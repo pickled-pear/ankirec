@@ -168,7 +168,7 @@ class FullRecorder(VerboseMixin):
         """
         with self._transition_lock:
             if not self.recording:
-                self.debug("Abort requested but no recording in progress; ignoring")
+                # self.debug("Abort requested but no recording in progress; ignoring")
                 return False
             self.recording = False
 

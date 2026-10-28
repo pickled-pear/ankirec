@@ -5,7 +5,7 @@ from ..context import verbose_mode
 
 
 @click.command(name="record")
-@click.option("--verbose", is_flag=True, default=False, help="Verbose flag")
+@click.option("--verbose", is_flag=True, default=True, help="Verbose flag")
 def record(verbose):
     """Starts listening to record screen"""
     listener_manager = ListenerManager()

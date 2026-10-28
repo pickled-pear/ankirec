@@ -19,7 +19,7 @@ class TtsController:
         
 
 
-    def create_tts(self, text: str, filename: str) -> Path:
+    def create_tts(self, text: str, filename: str) -> tuple[Path, Path]:
         import edge_tts
         """Creates TTS for the text using a random voice and returns the opus path."""
         # print(edge_tts.__version__)
@@ -45,8 +45,8 @@ class TtsController:
                 time.sleep(wait)
 
         opus_path = self._convert_to_opus(mp3_path)
-        mp3_path.unlink(missing_ok=True)
-        return opus_path
+        # mp3_path.unlink(missing_ok=True)
+        return mp3_path, opus_path
 
     @staticmethod
     def _convert_to_opus(filepath: Path) -> Path:

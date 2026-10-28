@@ -15,6 +15,7 @@ linux = []
 
 [project.scripts]
 ankirec = "ankirec.__main__:cli"
+arec = "ankirec.__main__:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

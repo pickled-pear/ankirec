@@ -2,6 +2,7 @@ import json
 import requests
 import socket
 import re
+import shutil
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -94,29 +95,33 @@ class AnkiconnectActions(SharedValues):
         super().__init__()
         self.set_port(port=port)
         self.API_VERSION = api_ver
-        # self.notes_json_file = Path("notes.json")
-        # self._moved_media_filename = None
 
-    def _invoke(self, action, **params):
-        if is_port_open(self.port):
-            """Sends an action request to AnkiConnect and returns the result.
+        self.anki_open = False
+        self.anki_media_dir: Path | None = None
+
+    def update_anki_open(self) -> None:
+        self.anki_open = is_port_open(self.port)
+
+
+    def _invoke(self, action, **params) -> dict:
+        """Sends an action request to AnkiConnect and returns the result.
+        
+        Args:
+            action: The AnkiConnect action name (e.g., 'deckNames', 'addNote')
+            **params: Additional parameters for the action
             
-            Args:
-                action: The AnkiConnect action name (e.g., 'deckNames', 'addNote')
-                **params: Additional parameters for the action
-                
-            Returns:
-                The result from AnkiConnect
-                
-            Raises:
-                AnkiConnectError: If the API returns an error or connection fails
-            """
+        Returns:
+            The result from AnkiConnect
+            
+        Raises:
+            AnkiConnectError: If the API returns an error or connection fails
+        """
+        if is_port_open(self.port):
             payload = {
                 "action": action,
                 "version": self.API_VERSION,
                 "params": params
             }
-            
             try:
                 response = requests.post(self.ANKI_CONNECT_URL, json=payload, timeout=10)
                 response.raise_for_status()
@@ -136,12 +141,16 @@ class AnkiconnectActions(SharedValues):
             return result
         else:
             self.warning("Anki port not detected. Nothing done")
+            return {
+                "result": None,
+                "error": "Anki was closed"
+            }
 
-    def send_notes_to_anki(self) -> None:
-        """Adds the contents of notes.json to anki itself"""
-        if is_port_open(self.port):
-            # with open(self.notes_json_file, "r") as f:
-            #     notes_json = json.load(f)
+    def send_notes_to_anki(self):
+        """Adds the contents of notes.json and the folder media to anki itself"""
+        if self.anki_open:
+
+            # get and send the notes
             notes_json = self.notes_json_manager.load()
             notes_array = notes_json.get("notes", [])
 
@@ -158,7 +167,18 @@ class AnkiconnectActions(SharedValues):
             result = self._invoke("addNotes", notes=notes_array)
             if not result.get("error"):
                 self.wipe_json()
-                
+
+            # now loop through the media dir and do the same
+            media_folder = Path(get_app_dir(APP_NAME)) / "media"
+            media_folder.mkdir(parents=True, exist_ok=True)
+
+            for file in media_folder.iterdir():
+                if file.is_file():
+                    self.move_file_to_anki_media(file.name, file)
+                    file.unlink()
+
+
+
             return result
 
         else:
@@ -176,19 +196,55 @@ class AnkiconnectActions(SharedValues):
         self.info("Note json cleared")
 
 
-    def move_file_to_ank_media(self, filename: str, filepath: Path):
-        """Moves the given file to anki"""
+    def get_media_dir(self) -> Path | None:
+        """Retrieves the local media dir"""
+        result = self._invoke(action="getMediaDirPath")
+        return Path(result.get("result")) if result else None
+
+
+    def move_file_to_anki_media(self, filename: str, filepath: Path):
+        """Moves the given file to Anki, or buffers it locally if Anki isn't running."""
         try:
             with open(filepath, 'rb') as f:
-                media_data = b64encode(f.read()).decode('utf-8')
+                raw_data = f.read()
         except FileNotFoundError:
             raise AnkiConnectError(f"File not found: {filepath}")
         except IOError as e:
             raise AnkiConnectError(f"Failed to read file {filepath}: {e}")
-        
-        result = self._invoke("storeMediaFile", filename=filename, data=media_data)
-        self.debug(f"Stored media file: {filename}")
-        # self._moved_media_filename = str(filepath)
+
+        safe_name = Path(filename).name
+
+        # use ankiconnect to move if anki open, otherwise move to the folder media in the app dir
+        if self.anki_open:
+            if not self.anki_media_dir:
+                self.anki_media_dir = self.get_media_dir()
+
+            # media_data = b64encode(raw_data).decode('utf-8')
+            # result = self._invoke("storeMediaFile", filename=filename, data=media_data)
+            destination = self.anki_media_dir / safe_name
+            shutil.copy(filepath, destination)
+            result = {
+                "result": "moved to anki",
+                "error": None
+            }
+            self.debug(f"Stored media file: {filename} in anki")
+        else:
+            media_folder = Path(get_app_dir(APP_NAME)) / "media"
+            media_folder.mkdir(parents=True, exist_ok=True)
+
+            # write the media to the folder
+            destination = media_folder / Path(filename).name
+            try:
+                destination.write_bytes(raw_data)
+            except OSError as e:
+                raise AnkiConnectError(f"Failed to buffer media file {filename}: {e}")
+
+            result = {
+                "result": "buffered media",
+                "error": None
+            }
+            self.debug(f"Stored media file: {filename} in the buffer folder ({destination})")
+
         return result
         
 
@@ -231,12 +287,6 @@ class AnkiManager(SharedValues):
         anki_config = config.load_section("anki")
         if not anki_config.get("deckname") or not anki_config.get("cardmodel"):
             raise ValueError("Deckname and Cardmodel must be provided")
-        
-        # cardmodel_fields=anki_config.get("cardmodel_fields", [])
-        # if not "Image" in cardmodel_fields:
-        #     raise ValueError("Your cardmodel must include a field called Image")
-        # if not "SentenceAudio" in cardmodel_fields:
-        #     raise ValueError("Your cardmodel must include a field called SentenceAudio")
 
         cardmodel_fields = self._load_fields(anki_config.get("cardmodel_fields", []))
         
@@ -296,21 +346,26 @@ class AnkiManager(SharedValues):
         return field_type in special_field_types
 
 
-    def move_media_to_anki(self, word_tts: Path = None):
+    def move_media_to_anki(self, word_tts: Path = None, media_dir: Path | None = None):
         """Moves both the screenshot and audio file to anki (if they exist)"""
+        # anki_open = is_port_open(self.actions.port)
+        self.actions.update_anki_open()
+        if media_dir:
+            self.actions.anki_media_dir = media_dir
+            
         if self.screenshot:
-            result = self.actions.move_file_to_ank_media(self.screenshot.name, self.screenshot)
+            result = self.actions.move_file_to_anki_media(self.screenshot.name, self.screenshot)
 
             if not result.get("error"):
                 self.debug("Screenshot moved")
 
         if self.audio:
-            result = self.actions.move_file_to_ank_media(self.audio.name, self.audio)
+            result = self.actions.move_file_to_anki_media(self.audio.name, self.audio)
             if not result.get("error"):
                 self.debug("Audio moved")
 
         if word_tts:
-            result = self.actions.move_file_to_ank_media(word_tts.name, word_tts)
+            result = self.actions.move_file_to_anki_media(word_tts.name, word_tts)
             if not result.get("error"):
                 self.debug("Word TTS move")
 
@@ -322,7 +377,7 @@ class AnkiManager(SharedValues):
                 return field.name
         return ""
 
-    def create_tts(self, text: str) -> Path:
+    def create_tts(self, text: str) -> tuple[Path, Path]:
         voices = self.config.tts_voices
         if voices:
             # steal the filename from self.audio, since that should exist
@@ -335,9 +390,9 @@ class AnkiManager(SharedValues):
             filename = f"{partial_filename}_tts"
             tts = TtsController(voices=voices)
             self.debug(f"Creating TTS on text {text}")
-            tts_file = tts.create_tts(text=text, filename=filename)
+            mp3, tts_file = tts.create_tts(text=text, filename=filename)
             self.debug("Saved tts")
-            return tts_file
+            return mp3, tts_file
 
 
     def add_notes_to_json(
@@ -353,16 +408,10 @@ class AnkiManager(SharedValues):
             if field_name:
                 note_fields[field_name] = value
 
+        self.actions.update_anki_open()
         self.config = self.load_config() # reloads the config in case there were any changes
         source = Sources.get_selected_source_name()
         note_fields = {}
-
-        # Media fields, only included if the media actually exists
-        # if self.screenshot.name:
-        #     note_fields["Image"] = f'<img src="{self.screenshot.name}">'
-        # if self.audio.name:
-        #     note_fields["SentenceAudio"] = f"[sound:{self.audio.name}]"
-
 
         # attempt to set special fields with special values if they exist
         if self.audio.name:
@@ -380,8 +429,6 @@ class AnkiManager(SharedValues):
         note_fields.update(fields or {})
         note_fields.update(kwargs)
 
-        # note_fields["Date"] = date.today().isoformat()
-        # note_fields["Source"] = source
 
         tags = ["ankirec", source]
         tags = [tag for tag in tags if tag] # removes empty tags
@@ -395,8 +442,6 @@ class AnkiManager(SharedValues):
 
         # Read existing notes, tolerating a missing or corrupt file
         try:
-            # with open(self.notes_json_file, "r", encoding="utf-8") as file:
-            #     existing_notes = json.load(file)
             existing_notes = self.notes_json_manager.load()
         except (FileNotFoundError, json.JSONDecodeError):
             self.error("No existing notes found. Using empty array")
@@ -409,11 +454,9 @@ class AnkiManager(SharedValues):
         self.debug(f"{len(existing_notes)} notes")
 
         # adds to the json
-        # with open(self.notes_json_file, "w", encoding="utf-8") as file:
-        #     json.dump(existing_notes, file, indent=4, ensure_ascii=False)
         self.notes_json_manager.save(existing_notes)
 
-        if self.config.instant_send:
+        if self.config.instant_send and self.actions.anki_open:
             self.info("Sending notes...")
             result = self.actions.send_notes_to_anki() or {}
             error = result.get("error")

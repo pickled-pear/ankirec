@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ankirec"
-version = "1.2.0"
+version = "1.2.1"
 readme = "README.md"
 description = "A tool for helping create your own anki flashcards, with screen and sound recording."
 dependencies = ["click", "pynput", "rich", "requests", "mss", "pillow", "miniaudio", "edge-tts>=7.3.1"]

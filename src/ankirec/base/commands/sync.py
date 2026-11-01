@@ -89,7 +89,7 @@ def firebase_push(confirm):
     if confirm:
         store = get_store()
         sources_json_file = Sources().file_path
-        with open(sources_json_file) as file:
+        with open(sources_json_file, encoding="utf-8") as file:
             sources_data = json.load(file)
 
         store.save(sources_data)

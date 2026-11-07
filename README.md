@@ -208,7 +208,8 @@ Settings worth knowing about besides the ones in [Setup](#setup):
 | `anki.ankiconnect_api_ver` | `6` | AnkiConnect API version |
 | `anki.tts_voices` | [] | Sets the tts voices to choose from. [A full list is available here](https://gist.github.com/BettyJJ/17cbaa1de96235a7f5773b8690a20462), eg af-ZA-AdriNeural |
 | `anki.anki_profile` | `User1` | The name of your anki profile, found by File->Switch Profile in anki |
-| `recording.recording_volume_lufs` | `-23` | How much to normalise your audio volume. Set somewhere lower than -18. I like -23. [See this video if you don't know what a luf is](https://www.youtube.com/watch?v=Is_wu0VRIqQ&t=256s) |
+| `recording.recording_volume_lufs` | `-23` | How much to normalise your audio volume. Set somewhere lower than -18. I like -23. 
+A luf is pretty much just a decibel normalised to human hearing |
 | `recording.blocksize` | `4096` | A parameter to tweak audio quality. Set higher on weaker machines. Lower (in theory) improves quality |
 | `recording.image_compression_factor` | `5` | How much ffmpeg will compress the image. 2 is barely noticable, 10 is very noticable |
 

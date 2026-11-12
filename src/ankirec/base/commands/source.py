@@ -78,18 +78,26 @@ def delete_object(path: str):
 
 @source.command(name="set")
 @click.argument("path", required=False)
-def set_source(path: str | None):
+@click.option("--include-archived", is_flag=True, default=False, help="Allow selecting sources inside archive folders")
+@click.option("--show-archived", is_flag=True, default=False, help="Expand archive folders in the picker")
+def set_source(path: str | None, include_archived: bool, show_archived: bool):
     """Sets the active source to PATH, or shows the tree to pick from if no PATH is given"""
     sources = Sources()
     if path is None:
         options: list[Source] = []
-        tree = source_tree_rich(sources.get_folder(), sources.selected_id, numbered=options)
+        tree = source_tree_rich(
+            sources.get_folder(), sources.selected_id, numbered=options,
+            include_archived=include_archived, collapse_archived=not show_archived,
+        )
         if not options:
-            raise click.ClickException("No sources yet. Add one with: source add NAME FOLDER source")
+            raise click.ClickException(
+                "No selectable sources. Add one with: source add NAME FOLDER source, "
+                "or use --include-archived"
+            )
         Console().print(tree)
         choice = click.prompt("Source number", type=click.IntRange(1, len(options)))
         path = options[choice - 1].full_path
-    item = run_action(sources.select, path)
+    item = run_action(sources.select, path, include_archived)
     success_message(f"Active source set to {item.path}")
 
 

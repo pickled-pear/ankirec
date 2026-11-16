@@ -123,3 +123,8 @@ def status_check():
         click.echo(f"Signed in as {store.email}")
     else:
         click.echo(f"Not signed in. Use ankirec source sync login to sign in.")
+
+@sync.command(name="show-json")
+def show_json():
+    """Reads the db saved sources.json to compare to the local copy"""
+    raise NotImplementedError

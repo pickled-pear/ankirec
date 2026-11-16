@@ -15,7 +15,7 @@ def source():
 source.add_command(sync)
 
 
-@source.command(name="list")
+@source.command(name="ls")
 @click.option("--folder", default="root", help="Folder to show. Root by default")
 def list_sources(folder: str):
     """Shows the source tree, with the active source marked"""

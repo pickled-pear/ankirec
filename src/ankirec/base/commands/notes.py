@@ -26,8 +26,14 @@ def sendnotes(verbose):
     success_message("Sent notes")
 
 
-# @notes.command(name="open")
-# def open_notes_json():
-#     """Opens the notes json file for inspection"""
-#     verbose_mode.set(False)
-#     json_file = anki.SharedValues().notes_json_file
+@notes.command(name="open")
+def open_notes_json():
+    """Opens the notes json file for inspection"""
+    # verbose_mode.set(False)
+    # json_file = anki.SharedValues().notes_json_file
+    raise NotImplementedError
+
+@notes.command(name="ls")
+def list_notes():
+    """Lists all notes in notes.json"""
+    raise NotImplementedError

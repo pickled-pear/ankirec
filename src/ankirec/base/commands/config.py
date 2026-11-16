@@ -11,7 +11,7 @@ def config():
     """View and edit the config"""
 
 
-@config.command(name="list")
+@config.command(name="ls")
 @click.option("--key", help="Specific key to show config for (none by default)")
 def list_config(key):
     """Lists all settings with their current values"""

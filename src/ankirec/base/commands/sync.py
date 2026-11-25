@@ -1,9 +1,12 @@
 import click
 import json
+from rich.tree import Tree
+from rich import print
 
 from ..config import Config
 from ..firebase_sync import FirebaseStore, SyncError
 from ...sources.source_manager import Sources
+from ...sources.source_tree import source_tree_rich
 
 def _friendly(err: SyncError) -> click.ClickException:
     FRIENDLY_ERRORS = {
@@ -29,6 +32,19 @@ def get_store() -> FirebaseStore:
     if not store.signed_in:
         raise SystemExit("Not signed in. Sign in first")
     return store
+
+def build_tree_dict(data: dict, branch: Tree) -> Tree:
+    name = data.get("name", "n/a")
+    if data.get("type", "source") == "source":
+        label = f"{name}"
+        branch.add(label)
+    else:
+        sub_branch = branch.add(f"[bold blue]{name}[/bold blue]")
+        children = data.get("children", [])
+        for child in children:
+            build_tree_dict(child, sub_branch)
+
+    return branch
 
 @click.group
 def sync():
@@ -124,7 +140,19 @@ def status_check():
     else:
         click.echo(f"Not signed in. Use ankirec source sync login to sign in.")
 
-@sync.command(name="show-json")
+@sync.command(name="check-cloud")
 def show_json():
     """Reads the db saved sources.json to compare to the local copy"""
-    raise NotImplementedError
+    store = get_store()
+    cloud_data = store.load()
+
+    sources_json_file = Sources().file_path
+    with open(sources_json_file, encoding="utf-8") as file:
+        local_data = json.load(file)
+
+    assert isinstance(cloud_data, dict)
+    print(build_tree_dict(cloud_data.get("file_system", {}), Tree("Cloud Sources")))
+
+    print("\nLocal copy matches synced copy!"
+          if local_data == cloud_data
+          else "Local and synced copies differ. Decide which to keep, then push or pull respectively.")

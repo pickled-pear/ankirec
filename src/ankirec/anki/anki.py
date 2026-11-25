@@ -464,6 +464,8 @@ class AnkiManager(SharedValues):
                 self.error(f"Error: {error}")
             else:
                 self.info("Sent notes!")
+        else:
+            self.info("Notes saved to json, but not sent to anki")
 
         return note_json
 

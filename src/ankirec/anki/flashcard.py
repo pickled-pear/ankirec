@@ -141,7 +141,7 @@ class FlashcardManager(VerboseMixin):
         # grabs the anki media dir for later
         self.anki_media_dir = ankimanager.actions.anki_media_dir
 
-        self.info("Adding note...")
+        self.info("Adding note to json...")
         ankimanager.add_notes_to_json(fields=fields)
 
 

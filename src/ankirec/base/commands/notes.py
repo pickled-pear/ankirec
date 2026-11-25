@@ -1,9 +1,10 @@
 import click
+import json
 
 from ..config import Config
 from ..context import verbose_mode
 from ..helpers import success_message
-from ...anki.anki import AnkiconnectActions
+from ...anki.anki import AnkiconnectActions, NotesJson
 
 
 @click.group
@@ -29,11 +30,13 @@ def sendnotes(verbose):
 @notes.command(name="open")
 def open_notes_json():
     """Opens the notes json file for inspection"""
-    # verbose_mode.set(False)
-    # json_file = anki.SharedValues().notes_json_file
-    raise NotImplementedError
+    NotesJson().open_json_file()
 
 @notes.command(name="ls")
 def list_notes():
     """Lists all notes in notes.json"""
-    raise NotImplementedError
+    saved_notes = NotesJson().load()
+    if not saved_notes:
+        print("No notes found.")
+        return
+    print(json.dumps(saved_notes, indent=4, ensure_ascii=False))
